@@ -6,12 +6,12 @@ import datetime
 # 1. KONFIGURASI HALAMAN APLIKASI
 # ----------------------------------------------------
 st.set_page_config(
-    page_title="Gym Progress Tracker", 
+    page_title="Gym & Running Progress Tracker", 
     layout="wide", 
     page_icon="🏋️‍♂️"
 )
 
-st.title("🏋️‍♂️ Gym Upper/Lower Progress Tracker")
+st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Progress Tracker")
 
 # ----------------------------------------------------
 # 2. CEK & KONEKSI GOOGLE SHEETS
@@ -21,7 +21,7 @@ try:
     from streamlit_gsheets import GSheetsConnection
     GSHEETS_AVAILABLE = True
 except ModuleNotFoundError:
-    st.error("⚠️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
+    st.error("⚠️️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
 
 COLS_WORKOUT = ["Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
 COLS_HABITS = ["Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
@@ -55,7 +55,7 @@ def save_worksheet(df, worksheet_name, state_key):
             return False
     return False
 
-# Load data awal ke session state jika belum ada
+# Load data awal ke session state
 if "df_workout" not in st.session_state:
     st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
 
@@ -144,56 +144,118 @@ if "Program Latihan" in menu:
 # MENU 2: INPUT WORKOUT LOG
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
-    st.subheader("🏋️‍♂️ Catat Sesi Latihan Harian")
+    st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Sesi Latihan & Running Harian")
     
     c1, c2, c3 = st.columns(3)
     tanggal = c1.date_input("Tanggal", datetime.date.today())
     hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
-    sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Custom"])
-
-    program_exercises = [e["Exercise"] for e in PROGRAM_DATA.get(sesi, [])]
-    dropdown_options = program_exercises + ["(Ketik Manual)"]
-
-    exercise_choice = st.selectbox("Pilih Gerakan dari Program", dropdown_options)
     
+    # Ditambahkan opsi "Running" dan "Custom Strength"
+    sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Running", "Custom Strength"])
+
+    # Menentukan pilihan dropdown gerakan berdasarkan sesi
+    if sesi == "Running":
+        dropdown_options = ["Easy Run", "Interval Run", "Tempo Run", "Long Run", "Treadmill Run", "(Ketik Manual)"]
+    elif sesi in PROGRAM_DATA:
+        program_exercises = [e["Exercise"] for e in PROGRAM_DATA[sesi]]
+        dropdown_options = program_exercises + ["(Ketik Manual)"]
+    else:
+        dropdown_options = ["(Ketik Manual)", "Bench Press", "Squat", "Deadlift", "Overhead Press", "Pull Up"]
+
+    exercise_choice = st.selectbox("Pilih Gerakan / Jenis Lari", dropdown_options)
+    
+    # Kolom Ketik Manual
     if exercise_choice == "(Ketik Manual)":
-        exercise_custom = st.text_input("Nama Gerakan (Ketik Manual)")
+        exercise_custom = st.text_input("Nama Gerakan / Sesi (Ketik Manual)")
         exercise_final = exercise_custom.strip()
     else:
         exercise_final = exercise_choice
 
-    c4, c5, c6, c7, c8 = st.columns(5)
-    set_num = c4.number_input("Set Ke-", min_value=1, value=1)
-    reps = c5.number_input("Reps (Ulang)", min_value=1, value=10)
-    beban = c6.number_input("Beban (kg)", min_value=0.0, value=20.0, step=0.5)
-    rir = c7.number_input("RIR (0-5)", min_value=0, max_value=5, value=2)
-    rpe = c8.number_input("RPE (1-10)", min_value=1, max_value=10, value=10-rir)
+    st.markdown("---")
 
-    catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
-
-    if st.button("➕ Simpan Set Latihan", type="primary"):
-        if not exercise_final:
-            st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
+    # ------------------------------------------------
+    # FORM DINAMIS: RUNNING vs GYM
+    # ------------------------------------------------
+    if sesi == "Running":
+        st.markdown("### 🏃‍♂️ Parameter Running")
+        rc1, rc2, rc3 = st.columns(3)
+        jarak = rc1.number_input("Jarak Lari (km)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+        waktu_menit = rc2.number_input("Waktu Tempuh (Menit)", min_value=1.0, value=30.0, step=0.5)
+        
+        # Hitung Pace Otomatis (min/km)
+        if jarak > 0:
+            pace_decimal = waktu_menit / jarak
+            pace_min = int(pace_decimal)
+            pace_sec = int(round((pace_decimal - pace_min) * 60))
+            if pace_sec == 60:
+                pace_min += 1
+                pace_sec = 0
+            pace_str = f"{pace_min}'{pace_sec:02d}\"/km"
         else:
-            new_entry = {
-                "Tanggal": tanggal.strftime("%Y-%m-%d"), 
-                "Hari": hari, 
-                "Sesi": sesi,
-                "Exercise": exercise_final, 
-                "Set": set_num, 
-                "Reps": reps,
-                "Beban (kg)": beban, 
-                "RIR": rir, 
-                "RPE": rpe, 
-                "Catatan": catatan
-            }
-            df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
-            success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
-            if success:
-                st.success(f"✅ Set {set_num} ({exercise_final}) berhasil tersimpan permanen di Google Sheets!")
+            pace_str = "0'00\"/km"
+
+        rc3.metric("⏱️ Pace Otomatis", pace_str)
+
+        rc4, rc5 = st.columns(2)
+        rpe = rc4.number_input("RPE / Effort (1-10)", min_value=1, max_value=10, value=7)
+        catatan = rc5.text_input("Catatan Lari (Misal: Heart Rate, Rute, Cuaca)")
+
+        if st.button("➕ Simpan Sesi Running", type="primary"):
+            if not exercise_final:
+                st.error("⚠️ Silakan pilih atau ketik jenis lari terlebih dahulu!")
+            else:
+                new_entry = {
+                    "Tanggal": tanggal.strftime("%Y-%m-%d"), 
+                    "Hari": hari, 
+                    "Sesi": sesi,
+                    "Exercise": exercise_final, 
+                    "Set": 1, 
+                    "Reps": f"{waktu_menit} min", 
+                    "Beban (kg)": jarak,    # Simpan angka jarak di kolom Beban (kg)
+                    "RIR": pace_str,        # Simpan teks Pace di kolom RIR
+                    "RPE": rpe, 
+                    "Catatan": catatan
+                }
+                df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
+                success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
+                if success:
+                    st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km @ {pace_str}) berhasil tersimpan!")
+
+    else:
+        # Sesi Gym / Strength Standard
+        st.markdown("### 🏋️‍♂️ Parameter Angkatan")
+        c4, c5, c6, c7, c8 = st.columns(5)
+        set_num = c4.number_input("Set Ke-", min_value=1, value=1)
+        reps = c5.number_input("Reps (Ulang)", min_value=1, value=10)
+        beban = c6.number_input("Beban (kg)", min_value=0.0, value=20.0, step=0.5)
+        rir = c7.number_input("RIR (0-5)", min_value=0, max_value=5, value=2)
+        rpe = c8.number_input("RPE (1-10)", min_value=1, max_value=10, value=10-rir)
+
+        catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
+
+        if st.button("➕ Simpan Set Latihan", type="primary"):
+            if not exercise_final:
+                st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
+            else:
+                new_entry = {
+                    "Tanggal": tanggal.strftime("%Y-%m-%d"), 
+                    "Hari": hari, 
+                    "Sesi": sesi,
+                    "Exercise": exercise_final, 
+                    "Set": set_num, 
+                    "Reps": reps, 
+                    "Beban (kg)": beban, 
+                    "RIR": rir, 
+                    "RPE": rpe, 
+                    "Catatan": catatan
+                }
+                df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
+                success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
+                if success:
+                    st.success(f"✅ Set {set_num} ({exercise_final}) berhasil tersimpan!")
 
     st.markdown("---")
-    st.subheader("📜 Riwayat Workout Log")
+    st.subheader("📜 Riwayat Workout & Running Log")
     
     df_workout = st.session_state["df_workout"]
     if not df_workout.empty:
@@ -201,7 +263,7 @@ elif "Input Workout Log" in menu:
         
         col_del1, col_del2 = st.columns(2)
         with col_del1:
-            if st.button("↩️ Hapus Set Terakhir (Undo)"):
+            if st.button("↩️ Hapus Set/Lari Terakhir (Undo)"):
                 df_updated = df_workout.iloc[:-1]
                 save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
@@ -213,7 +275,7 @@ elif "Input Workout Log" in menu:
                 save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
     else:
-        st.info("Belum ada data latihan terdaftar di Google Sheets.")
+        st.info("Belum ada data latihan / running terdaftar di Google Sheets.")
 
 # ----------------------------------------------------
 # MENU 3: DAILY HABITS
@@ -295,19 +357,47 @@ elif "Progress Mingguan" in menu:
 # MENU 5: DASHBOARD STATS
 # ----------------------------------------------------
 elif "Dashboard Stats" in menu:
-    st.subheader("📊 Dashboard & Grafik Progressive Overload")
+    st.subheader("📊 Dashboard & Grafik Progress")
     
     df_workout = st.session_state["df_workout"]
     if not df_workout.empty:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Set Dicatat", len(df_workout))
+        # Pisahkan Data Gym dan Running
+        df_gym = df_workout[df_workout["Sesi"] != "Running"].copy()
+        df_run = df_workout[df_workout["Sesi"] == "Running"].copy()
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Set Gym", len(df_gym))
         
-        vol = (df_workout["Beban (kg)"].astype(float) * df_workout["Reps"].astype(float)).sum()
-        col2.metric("Total Volume Angkatan", f"{vol:,.0f} kg")
-        col3.metric("Jumlah Variasi Gerakan", df_workout["Exercise"].nunique())
+        # Hitung Volume Gym
+        if not df_gym.empty:
+            df_gym["Beban_num"] = pd.to_numeric(df_gym["Beban (kg)"], errors='coerce').fillna(0)
+            df_gym["Reps_num"] = pd.to_numeric(df_gym["Reps"], errors='coerce').fillna(0)
+            vol = (df_gym["Beban_num"] * df_gym["Reps_num"]).sum()
+            col2.metric("Total Volume Gym", f"{vol:,.0f} kg")
+        else:
+            col2.metric("Total Volume Gym", "0 kg")
+
+        # Hitung Total Jarak Running
+        if not df_run.empty:
+            df_run["Jarak_num"] = pd.to_numeric(df_run["Beban (kg)"], errors='coerce').fillna(0)
+            total_km = df_run["Jarak_num"].sum()
+            col3.metric("Total Jarak Lari", f"{total_km:.1f} km")
+        else:
+            col3.metric("Total Jarak Lari", "0 km")
+
+        col4.metric("Variasi Gerakan", df_workout["Exercise"].nunique())
 
         st.markdown("---")
-        st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
-        st.line_chart(df_workout, x="Tanggal", y="Beban (kg)", color="Exercise")
+        
+        # Grafik Progressive Overload (Gym)
+        if not df_gym.empty:
+            st.subheader("📈 Kenaikan Beban Angkatan Gym (Progressive Overload)")
+            st.line_chart(df_gym, x="Tanggal", y="Beban (kg)", color="Exercise")
+
+        # Grafik Progress Jarak Running
+        if not df_run.empty:
+            st.subheader("🏃‍♂️ Progress Jarak Lari (km)")
+            st.line_chart(df_run, x="Tanggal", y="Beban (kg)", color="Exercise")
+
     else:
-        st.warning("⚠️ Belum ada data latihan yang dicatat di Google Sheets.")
+        st.warning("⚠️ Belum ada data latihan / running yang dicatat.")
