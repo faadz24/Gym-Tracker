@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from streamlit_gsheets import GSheetsConnection
 
 # ----------------------------------------------------
 # 1. KONFIGURASI HALAMAN APLIKASI
@@ -12,40 +11,63 @@ st.set_page_config(
     page_icon="🏋️‍♂️"
 )
 
-st.title("🏋️‍♂️️ Gym Upper/Lower Progress Tracker")
-st.caption("Aplikasi pencatatan latihan & progres harian/mingguan berbasis program Upper/Lower Split — Connected to Google Sheets")
+st.title("🏋️‍♂️ Gym Upper/Lower Progress Tracker")
 
 # ----------------------------------------------------
-# 2. KONEKSI GOOGLE SHEETS & HELPER FUNCTIONS
+# 2. SAFE LOAD MODULE (GSHEETS / LOCAL FALLBACK)
 # ----------------------------------------------------
-conn = st.connection("gsheets", type=GSheetsConnection)
+GSHEETS_AVAILABLE = False
+try:
+    from streamlit_gsheets import GSheetsConnection
+    GSHEETS_AVAILABLE = True
+except ModuleNotFoundError:
+    st.warning("⚠️ Modul 'st-gsheets-connection' belum ter-install. Memakai mode penyimpanan lokal.")
 
-def load_data(worksheet_name, default_cols):
-    try:
-        df = conn.read(worksheet=worksheet_name, ttl="0")
-        if df is None or df.empty:
-            return pd.DataFrame(columns=default_cols)
-        return df
-    except Exception:
-        return pd.DataFrame(columns=default_cols)
-
-def save_data(df, worksheet_name):
-    try:
-        conn.update(worksheet=worksheet_name, data=df)
-    except Exception as e:
-        st.error(f"Gagal menyimpan ke Google Sheets: {e}")
-
-# Load data dari Google Sheets (akan otomatis membuat struktur kolom jika kosong)
+# ----------------------------------------------------
+# 3. KONEKSI GOOGLE SHEETS & HELPER FUNCTIONS
+# ----------------------------------------------------
 COLS_WORKOUT = ["Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
 COLS_HABITS = ["Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
 COLS_WEEKLY = ["Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
 
-df_workout = load_data("Workout_Logs", COLS_WORKOUT)
-df_habits = load_data("Habits_Logs", COLS_HABITS)
-df_weekly = load_data("Weekly_Logs", COLS_WEEKLY)
+# Init Session State
+for key, cols in [("df_workout", COLS_WORKOUT), ("df_habits", COLS_HABITS), ("df_weekly", COLS_WEEKLY)]:
+    if key not in st.session_state:
+        st.session_state[key] = pd.DataFrame(columns=cols)
+
+if GSHEETS_AVAILABLE:
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        def load_data(sheet_name, default_cols):
+            try:
+                df = conn.read(worksheet=sheet_name, ttl="0")
+                return df if df is not None and not df.empty else pd.DataFrame(columns=default_cols)
+            except Exception:
+                return pd.DataFrame(columns=default_cols)
+        
+        df_workout = load_data("Workout_Logs", COLS_WORKOUT)
+        df_habits = load_data("Habits_Logs", COLS_HABITS)
+        df_weekly = load_data("Weekly_Logs", COLS_WEEKLY)
+    except Exception as e:
+        df_workout = st.session_state["df_workout"]
+        df_habits = st.session_state["df_habits"]
+        df_weekly = st.session_state["df_weekly"]
+else:
+    df_workout = st.session_state["df_workout"]
+    df_habits = st.session_state["df_habits"]
+    df_weekly = st.session_state["df_weekly"]
+
+def save_data(df, worksheet_name, state_key):
+    st.session_state[state_key] = df
+    if GSHEETS_AVAILABLE:
+        try:
+            conn.update(worksheet=worksheet_name, data=df)
+            st.success("✅ Data tersimpan ke Google Sheets!")
+        except Exception as e:
+            st.warning(f"Tersimpan lokal (Gagal update Google Sheets: {e})")
 
 # ----------------------------------------------------
-# 3. DATABASE PROGRAM LATIHAN (REVISI GERAKAN)
+# 4. DATABASE PROGRAM LATIHAN
 # ----------------------------------------------------
 PROGRAM_DATA = {
     "Upper A": [
@@ -92,7 +114,7 @@ PROGRAM_DATA = {
 }
 
 # ----------------------------------------------------
-# 4. NAVIGASI SIDEBAR MENU
+# 5. NAVIGASI SIDEBAR
 # ----------------------------------------------------
 menu = st.sidebar.radio(
     "📍 Navigasi Menu", 
@@ -104,7 +126,7 @@ menu = st.sidebar.radio(
 # ----------------------------------------------------
 if "Program Latihan" in menu:
     st.subheader("📋 Detail Program Upper / Lower Split")
-    st.info("💡 **Aturan Overload:** Catat beban & reps setiap sesi. Jika semua set sudah mencapai batas atas reps dengan teknik bagus, naikkan beban sedikit pada sesi berikutnya. (RIR 1-2 ≈ RPE 8-9)")
+    st.info("💡 **Aturan Overload:** Catat beban & reps setiap sesi. Jika semua set sudah mencapai batas atas reps dengan teknik bagus, naikkan beban sedikit pada sesi berikutnya.")
     
     col1, col2 = st.columns(2)
     for idx, (sesi_name, ex_list) in enumerate(PROGRAM_DATA.items()):
@@ -116,16 +138,18 @@ if "Program Latihan" in menu:
 # MENU 2: INPUT WORKOUT LOG
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
-    st.subheader("🏋️‍♂️️ Catat Sesi Latihan Harian")
+    st.subheader("🏋️‍♂️ Catat Sesi Latihan Harian")
     
-    with st.form("form_workout"):
-        c1, c2, c3 = st.columns(3)
-        tanggal = c1.date_input("Tanggal", datetime.date.today())
-        hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
-        sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Custom"])
+    # --- DITARUH DI LUAR FORM AGAR DYNAMIC REAL-TIME ---
+    c1, c2, c3 = st.columns(3)
+    tanggal = c1.date_input("Tanggal", datetime.date.today())
+    hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
+    sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Custom"])
 
-        # Pilihan gerakan otomatis sesuai sesi yang dipilih
-        program_exercises = [e["Exercise"] for e in PROGRAM_DATA.get(sesi, [])]
+    # Otomatis update daftar gerakan berdasarkan Sesi yang dipilih
+    program_exercises = [e["Exercise"] for e in PROGRAM_DATA.get(sesi, [])]
+
+    with st.form("form_workout", clear_on_submit=False):
         exercise_choice = st.selectbox("Pilih Gerakan dari Program", ["(Ketik Manual)"] + program_exercises)
         exercise_custom = st.text_input("Nama Gerakan (jika ketik manual)", value="" if exercise_choice != "(Ketik Manual)" else "")
         
@@ -155,8 +179,7 @@ elif "Input Workout Log" in menu:
                 "Catatan": catatan
             }
             df_updated = pd.concat([df_workout, pd.DataFrame([new_entry])], ignore_index=True)
-            save_data(df_updated, "Workout_Logs")
-            st.success(f"Set ke-{set_num} untuk {exercise_final} berhasil disimpan ke Google Sheets!")
+            save_data(df_updated, "Workout_Logs", "df_workout")
             st.rerun()
 
     st.markdown("---")
@@ -166,30 +189,20 @@ elif "Input Workout Log" in menu:
         st.dataframe(df_workout, use_container_width=True)
         
         col_del1, col_del2 = st.columns(2)
-        
-        # FITUR HAPUS 1: UNDO BARIS TERAKHIR
         with col_del1:
             if st.button("↩️ Hapus Set Terakhir (Undo)"):
                 df_updated = df_workout.iloc[:-1]
-                save_data(df_updated, "Workout_Logs")
-                st.warning("Set terakhir berhasil dihapus dari Google Sheets!")
+                save_data(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
                 
-        # FITUR HAPUS 2: HAPUS BARIS SPESIFIK
         with col_del2:
-            row_to_delete = st.number_input(
-                "Hapus Baris Indeks Ke-:", 
-                min_value=0, 
-                max_value=len(df_workout)-1 if len(df_workout) > 0 else 0, 
-                step=1
-            )
+            row_to_delete = st.number_input("Hapus Baris Indeks Ke-:", min_value=0, max_value=max(0, len(df_workout)-1), step=1)
             if st.button("🗑️ Hapus Baris Ini"):
                 df_updated = df_workout.drop(index=row_to_delete).reset_index(drop=True)
-                save_data(df_updated, "Workout_Logs")
-                st.warning(f"Baris indeks ke-{row_to_delete} berhasil dihapus!")
+                save_data(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
     else:
-        st.info("Belum ada data latihan terdaftar di Google Sheets.")
+        st.info("Belum ada data latihan terdaftar.")
 
 # ----------------------------------------------------
 # MENU 3: DAILY HABITS
@@ -212,7 +225,7 @@ elif "Daily Habits" in menu:
         e1, e2 = st.columns(2)
         energi = e1.slider("Level Energi Harian (1-5)", 1, 5, 4)
         recovery = e2.slider("Level Recovery / Pemulihan (1-5)", 1, 5, 4)
-        cat = st.text_input("Catatan Tambahan Harian (contoh: Jam tidur, stres, dll)")
+        cat = st.text_input("Catatan Tambahan Harian")
 
         sub_h = st.form_submit_button("💾 Simpan Kebiasaan Harian")
         if sub_h:
@@ -228,8 +241,7 @@ elif "Daily Habits" in menu:
                 "Catatan": cat
             }
             df_updated = pd.concat([df_habits, pd.DataFrame([h_entry])], ignore_index=True)
-            save_data(df_updated, "Habits_Logs")
-            st.success("Data kebiasaan harian tersimpan ke Google Sheets!")
+            save_data(df_updated, "Habits_Logs", "df_habits")
             st.rerun()
 
     st.markdown("---")
@@ -267,8 +279,7 @@ elif "Progress Mingguan" in menu:
                 "Catatan": cat_w
             }
             df_updated = pd.concat([df_weekly, pd.DataFrame([w_entry])], ignore_index=True)
-            save_data(df_updated, "Weekly_Logs")
-            st.success("Rekap mingguan berhasil tersimpan ke Google Sheets!")
+            save_data(df_updated, "Weekly_Logs", "df_weekly")
             st.rerun()
 
     st.markdown("---")
@@ -293,4 +304,4 @@ elif "Dashboard Stats" in menu:
         st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
         st.line_chart(df_workout, x="Tanggal", y="Beban (kg)", color="Exercise")
     else:
-        st.warning("⚠️ Belum ada data latihan yang dicatat. Silakan isi dulu melalui menu 'Input Workout Log'.")
+        st.warning("⚠️ Belum ada data latihan yang dicatat.")
