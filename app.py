@@ -8,7 +8,7 @@ import datetime
 st.set_page_config(
     page_title="Gym & Running Progress Tracker", 
     layout="wide", 
-    page_icon="🏋️‍♂️"
+    page_icon="🏋️‍♂️️"
 )
 
 # ----------------------------------------------------
@@ -32,7 +32,7 @@ def load_worksheet(worksheet_name, default_cols):
             conn = st.connection("gsheets", type=GSheetsConnection)
             df = conn.read(worksheet=worksheet_name, ttl=0)
             if df is not None:
-                # Otomatis tambahkan kolom yang belum ada agar tidak error
+                # Tambahkan kolom default jika belum ada di Google Sheets (cegah KeyError)
                 for col in default_cols:
                     if col not in df.columns:
                         df[col] = ""
@@ -188,7 +188,7 @@ PROGRAM_DATA = {
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["📋 Program Latihan", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats"]
+    ["📋 Program Latihan", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
@@ -311,7 +311,6 @@ elif "Input Workout Log" in menu:
     st.markdown("---")
     st.subheader(f"📜 Riwayat Workout & Running (@{current_user})")
     
-    # FILTER HANYA UNTUK USER YANG SEDANG LOGIN
     df_all_workout = st.session_state["df_workout"]
     df_user_workout = df_all_workout[df_all_workout["User"] == current_user].reset_index(drop=True)
     
@@ -445,3 +444,56 @@ elif "Dashboard Stats" in menu:
 
     else:
         st.warning("⚠️ Belum ada data latihan / running yang dicatat untuk akun kamu.")
+
+# ----------------------------------------------------
+# MENU 6: PENGATURAN (SETTINGS)
+# ----------------------------------------------------
+elif "Pengaturan" in menu:
+    st.subheader("⚙️ Pengaturan Akun & Profil")
+
+    tab_profile, tab_security = st.tabs(["👤 Edit Profil", "🔒 Keamanan & Password"])
+
+    # TAB 1: EDIT PROFIL
+    with tab_profile:
+        st.markdown("### 👤 Ubah Profil Pengguna")
+        st.text_input("Username (Tidak bisa diubah)", value=current_user, disabled=True)
+        new_fullname = st.text_input("Nama Lengkap", value=user_fullname)
+
+        if st.button("💾 Simpan Perubahan Nama", type="primary"):
+            if new_fullname.strip():
+                df_u = st.session_state["df_users"]
+                idx = df_u[df_u["Username"].astype(str).str.lower() == current_user].index
+                if not idx.empty:
+                    df_u.loc[idx[0], "Nama"] = new_fullname.strip()
+                    success = save_worksheet(df_u, "Users", "df_users")
+                    if success:
+                        st.session_state["user_fullname"] = new_fullname.strip()
+                        st.success("✅ Nama lengkap berhasil diperbarui!")
+                        st.rerun()
+            else:
+                st.error("⚠️ Nama lengkap tidak boleh kosong!")
+
+    # TAB 2: UBAH PASSWORD
+    with tab_security:
+        st.markdown("### 🔒 Ubah Kata Sandi (Password)")
+        old_pass = st.text_input("Password Saat Ini", type="password")
+        new_pass = st.text_input("Password Baru", type="password")
+        confirm_pass = st.text_input("Konfirmasi Password Baru", type="password")
+
+        if st.button("🔑 Perbarui Password", type="primary"):
+            df_u = st.session_state["df_users"]
+            user_mask = df_u["Username"].astype(str).str.lower() == current_user
+            user_row = df_u[user_mask]
+
+            if user_row.empty or str(user_row.iloc[0]["Password"]) != old_pass:
+                st.error("❌ Password saat ini tidak sesuai!")
+            elif not new_pass.strip():
+                st.error("⚠️ Password baru tidak boleh kosong!")
+            elif new_pass != confirm_pass:
+                st.error("❌ Konfirmasi password baru tidak cocok!")
+            else:
+                idx = user_row.index[0]
+                df_u.loc[idx, "Password"] = new_pass
+                success = save_worksheet(df_u, "Users", "df_users")
+                if success:
+                    st.success("🎉 Password berhasil diperbarui! Silakan gunakan password baru saat login berikutnya.")
