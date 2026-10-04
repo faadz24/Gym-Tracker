@@ -41,7 +41,12 @@ if GSHEETS_AVAILABLE:
         def load_data(sheet_name, default_cols):
             try:
                 df = conn.read(worksheet=sheet_name, ttl="0")
-                return df if df is not None and not df.empty else pd.DataFrame(columns=default_cols)
+                if df is not None and not df.empty:
+                    for col in default_cols:
+                        if col not in df.columns:
+                            df[col] = ""
+                    return df[default_cols]
+                return pd.DataFrame(columns=default_cols)
             except Exception:
                 return pd.DataFrame(columns=default_cols)
         
@@ -62,9 +67,10 @@ def save_data(df, worksheet_name, state_key):
     if GSHEETS_AVAILABLE:
         try:
             conn.update(worksheet=worksheet_name, data=df)
-            st.success("✅ Data tersimpan ke Google Sheets!")
+            st.toast("✅ Data berhasil disimpan ke Google Sheets!")
         except Exception as e:
-            st.warning(f"Tersimpan lokal (Gagal update Google Sheets: {e})")
+            st.error(f"❌ Gagal menyimpan ke Google Sheets: {e}")
+            st.info("Data disimpan sementara di memori aplikasi.")
 
 # ----------------------------------------------------
 # 4. DATABASE PROGRAM LATIHAN
@@ -140,20 +146,22 @@ if "Program Latihan" in menu:
 elif "Input Workout Log" in menu:
     st.subheader("🏋️‍♂️ Catat Sesi Latihan Harian")
     
-    # --- DITARUH DI LUAR FORM AGAR DYNAMIC REAL-TIME ---
     c1, c2, c3 = st.columns(3)
     tanggal = c1.date_input("Tanggal", datetime.date.today())
     hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
     sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Custom"])
 
-    # Otomatis update daftar gerakan berdasarkan Sesi yang dipilih
     program_exercises = [e["Exercise"] for e in PROGRAM_DATA.get(sesi, [])]
+    dropdown_options = program_exercises + ["(Ketik Manual)"]
 
     with st.form("form_workout", clear_on_submit=False):
-        exercise_choice = st.selectbox("Pilih Gerakan dari Program", ["(Ketik Manual)"] + program_exercises)
-        exercise_custom = st.text_input("Nama Gerakan (jika ketik manual)", value="" if exercise_choice != "(Ketik Manual)" else "")
+        exercise_choice = st.selectbox("Pilih Gerakan dari Program", dropdown_options)
         
-        exercise_final = exercise_choice if exercise_choice != "(Ketik Manual)" else exercise_custom
+        if exercise_choice == "(Ketik Manual)":
+            exercise_custom = st.text_input("Nama Gerakan (Ketik Manual)")
+            exercise_final = exercise_custom.strip()
+        else:
+            exercise_final = exercise_choice
 
         c4, c5, c6, c7, c8 = st.columns(5)
         set_num = c4.number_input("Set Ke-", min_value=1, value=1)
@@ -165,22 +173,25 @@ elif "Input Workout Log" in menu:
         catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
         submitted = st.form_submit_button("➕ Simpan Set Latihan")
 
-        if submitted and exercise_final:
-            new_entry = {
-                "Tanggal": tanggal.strftime("%Y-%m-%d"), 
-                "Hari": hari, 
-                "Sesi": sesi,
-                "Exercise": exercise_final, 
-                "Set": set_num, 
-                "Reps": reps,
-                "Beban (kg)": beban, 
-                "RIR": rir, 
-                "RPE": rpe, 
-                "Catatan": catatan
-            }
-            df_updated = pd.concat([df_workout, pd.DataFrame([new_entry])], ignore_index=True)
-            save_data(df_updated, "Workout_Logs", "df_workout")
-            st.rerun()
+        if submitted:
+            if not exercise_final:
+                st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
+            else:
+                new_entry = {
+                    "Tanggal": tanggal.strftime("%Y-%m-%d"), 
+                    "Hari": hari, 
+                    "Sesi": sesi,
+                    "Exercise": exercise_final, 
+                    "Set": set_num, 
+                    "Reps": reps,
+                    "Beban (kg)": beban, 
+                    "RIR": rir, 
+                    "RPE": rpe, 
+                    "Catatan": catatan
+                }
+                df_updated = pd.concat([df_workout, pd.DataFrame([new_entry])], ignore_index=True)
+                save_data(df_updated, "Workout_Logs", "df_workout")
+                st.rerun()
 
     st.markdown("---")
     st.subheader("📜 Riwayat Workout Log & Hapus Data")
