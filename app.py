@@ -96,14 +96,15 @@ if "user_photo" not in st.session_state:
     st.session_state["user_photo"] = ""
 
 # ----------------------------------------------------
-# 4. HALAMAN LOGIN & REGISTER (JIKA BELUM LOGIN)
+# 4. HALAMAN LOGIN, REGISTER & LUPA PASSWORD
 # ----------------------------------------------------
 if not st.session_state["logged_in"]:
     st.title("🏋️‍♂️ Gym & Running Progress Tracker")
     st.subheader("Silakan Login atau Buat Akun Baru")
 
-    tab_login, tab_register = st.tabs(["🔑 Login", "📝 Buat Akun Baru"])
+    tab_login, tab_register, tab_forgot = st.tabs(["🔑 Login", "📝 Buat Akun Baru", "❓ Lupa Password"])
 
+    # TAB LOGIN
     with tab_login:
         login_user = st.text_input("Username", key="login_u").strip().lower()
         login_pass = st.text_input("Password", type="password", key="login_p")
@@ -120,6 +121,7 @@ if not st.session_state["logged_in"]:
             else:
                 st.error("❌ Username atau Password salah!")
 
+    # TAB REGISTER
     with tab_register:
         reg_name = st.text_input("Nama Lengkap", key="reg_n")
         reg_user = st.text_input("Username Baru (Tanpa Spasi)", key="reg_u").strip().lower()
@@ -136,6 +138,36 @@ if not st.session_state["logged_in"]:
                 df_updated = pd.concat([df_u, pd.DataFrame([new_user])], ignore_index=True)
                 save_worksheet(df_updated, "Users", "df_users")
                 st.success("🎉 Akun berhasil dibuat! Silakan pindah ke tab Login untuk masuk.")
+
+    # TAB LUPA PASSWORD
+    with tab_forgot:
+        st.markdown("### 🔑 Reset Password")
+        st.caption("Masukkan username dan nama lengkap sesuai saat pendaftaran untuk reset password.")
+        
+        forgot_user = st.text_input("Username", key="forgot_u").strip().lower()
+        forgot_name = st.text_input("Nama Lengkap (Sesuai Akun)", key="forgot_n").strip()
+        forgot_new_pass = st.text_input("Password Baru", type="password", key="forgot_p")
+        forgot_confirm_pass = st.text_input("Konfirmasi Password Baru", type="password", key="forgot_cp")
+
+        if st.button("🔑 Reset Password", type="primary"):
+            if not forgot_user or not forgot_name or not forgot_new_pass:
+                st.error("⚠️ Semua kolom wajib diisi!")
+            elif forgot_new_pass != forgot_confirm_pass:
+                st.error("❌ Konfirmasi password baru tidak cocok!")
+            else:
+                df_u = st.session_state["df_users"]
+                # Verifikasi Username & Nama Lengkap (case-insensitive)
+                mask = (df_u["Username"].astype(str).str.lower() == forgot_user) & (df_u["Nama"].astype(str).str.strip().str.lower() == forgot_name.lower())
+                matched_user = df_u[mask]
+
+                if matched_user.empty:
+                    st.error("❌ Username atau Nama Lengkap tidak cocok dengan data kami!")
+                else:
+                    target_idx = matched_user.index[0]
+                    df_u.loc[target_idx, "Password"] = forgot_new_pass
+                    success = save_worksheet(df_u, "Users", "df_users")
+                    if success:
+                        st.success("🎉 Password berhasil diperbarui! Silakan kembali ke tab **🔑 Login** untuk masuk.")
 
     st.stop()
 
@@ -319,7 +351,7 @@ elif "Input Workout Log" in menu:
 
         if st.button("➕ Simpan Set Latihan", type="primary"):
             if not exercise_final:
-                st.error("⚠️️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
+                st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
             else:
                 new_entry = {
                     "User": current_user,
@@ -347,13 +379,9 @@ elif "Input Workout Log" in menu:
     if not df_user_workout_idx.empty:
         st.dataframe(df_user_workout_idx.reset_index(drop=True), use_container_width=True)
 
-        # ----------------------------------------------------
-        # FITUR HAPUS LOG WORKOUT (MULTI-USER SAFE)
-        # ----------------------------------------------------
-        with st.expander("🗑️ Hapus Baris Log Latihan"):
+        with st.expander("🗑️️ Hapus Baris Log Latihan"):
             st.caption("Pilih baris log yang salah dimasukkan untuk dihapus secara permanen.")
             
-            # Buat opsi daftar pilihan yang jelas untuk user
             log_options = {
                 f"[{row['Tanggal']}] {row['Sesi']} - {row['Exercise']} (Set {row['Set']} | {row['Beban (kg)']}kg x {row['Reps']})": orig_idx 
                 for orig_idx, row in df_user_workout_idx.iterrows()
@@ -363,11 +391,8 @@ elif "Input Workout Log" in menu:
             
             if st.button("🔴 Hapus Log Ini", type="secondary"):
                 target_orig_index = log_options[selected_log_label]
-                
-                # Hapus baris berdasarkan indeks master asli
                 df_updated = df_all_workout.drop(target_orig_index).reset_index(drop=True)
                 
-                # Simpan perubahan ke Google Sheets
                 success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 if success:
                     st.success("✅ Log latihan berhasil dihapus dari Google Sheets!")
@@ -480,7 +505,7 @@ elif "Dashboard Stats" in menu:
             total_km = df_run["Jarak_num"].sum()
             col3.metric("Total Jarak Lari", f"{total_km:.1f} km")
         else:
-            col3.metric("Total Jarak Lari", "0 km")
+            col3.metric("Total Jarak Lari", "0 kg")
 
         col4.metric("Variasi Gerakan", df_user_workout["Exercise"].nunique())
 
