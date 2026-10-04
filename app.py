@@ -11,8 +11,6 @@ st.set_page_config(
     page_icon="🏋️‍♂️"
 )
 
-st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Progress Tracker")
-
 # ----------------------------------------------------
 # 2. CEK & KONEKSI GOOGLE SHEETS
 # ----------------------------------------------------
@@ -21,11 +19,12 @@ try:
     from streamlit_gsheets import GSheetsConnection
     GSHEETS_AVAILABLE = True
 except ModuleNotFoundError:
-    st.error("⚠️️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
+    st.error("⚠️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
 
-COLS_WORKOUT = ["Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
-COLS_HABITS = ["Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
-COLS_WEEKLY = ["Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
+COLS_USERS = ["Username", "Password", "Nama"]
+COLS_WORKOUT = ["User", "Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
+COLS_HABITS = ["User", "Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
+COLS_WEEKLY = ["User", "Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
 
 def load_worksheet(worksheet_name, default_cols):
     if GSHEETS_AVAILABLE:
@@ -51,11 +50,13 @@ def save_worksheet(df, worksheet_name, state_key):
             return True
         except Exception as e:
             st.error(f"❌ GAGAL SIMPAN KE GOOGLE SHEETS: {e}")
-            st.info("💡 Pastikan email Service Account sudah dijadikan 'Editor' di Google Sheets kamu!")
             return False
     return False
 
-# Load data awal ke session state
+# Init Data ke Session State
+if "df_users" not in st.session_state:
+    st.session_state["df_users"] = load_worksheet("Users", COLS_USERS)
+
 if "df_workout" not in st.session_state:
     st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
 
@@ -65,9 +66,81 @@ if "df_habits" not in st.session_state:
 if "df_weekly" not in st.session_state:
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
 
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
+if "user_fullname" not in st.session_state:
+    st.session_state["user_fullname"] = ""
+
 # ----------------------------------------------------
-# 3. DATABASE PROGRAM LATIHAN
+# 3. HALAMAN LOGIN & REGISTER (JIKA BELUM LOGIN)
 # ----------------------------------------------------
+if not st.session_state["logged_in"]:
+    st.title("🏋️‍♂️ Gym & Running Progress Tracker")
+    st.subheader("Silakan Login atau Buat Akun Baru")
+
+    tab_login, tab_register = st.tabs(["🔑 Login", "📝 Buat Akun Baru"])
+
+    with tab_login:
+        login_user = st.text_input("Username", key="login_u").strip().lower()
+        login_pass = st.text_input("Password", type="password", key="login_p")
+        if st.button("Masuk / Login", type="primary"):
+            df_u = st.session_state["df_users"]
+            matched_user = df_u[(df_u["Username"].astype(str).str.lower() == login_user) & (df_u["Password"].astype(str) == login_pass)]
+            if not matched_user.empty:
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = login_user
+                st.session_state["user_fullname"] = matched_user.iloc[0]["Nama"]
+                st.success(f"Selamat datang kembali, {st.session_state['user_fullname']}!")
+                st.rerun()
+            else:
+                st.error("❌ Username atau Password salah!")
+
+    with tab_register:
+        reg_name = st.text_input("Nama Lengkap", key="reg_n")
+        reg_user = st.text_input("Username Baru (Tanpa Spasi)", key="reg_u").strip().lower()
+        reg_pass = st.text_input("Password Baru", type="password", key="reg_p")
+        
+        if st.button("Daftar Akun Baru"):
+            df_u = st.session_state["df_users"]
+            if not reg_user or not reg_pass or not reg_name:
+                st.error("⚠️ Semua kolom wajib diisi!")
+            elif reg_user in df_u["Username"].astype(str).str.lower().values:
+                st.error("⚠️ Username sudah terpakai, silakan pakai username lain!")
+            else:
+                new_user = {"Username": reg_user, "Password": reg_pass, "Nama": reg_name}
+                df_updated = pd.concat([df_u, pd.DataFrame([new_user])], ignore_index=True)
+                save_worksheet(df_updated, "Users", "df_users")
+                st.success("🎉 Akun berhasil dibuat! Silakan pindah ke tab Login untuk masuk.")
+
+    st.stop()
+
+# ----------------------------------------------------
+# 4. APLIKASI UTAMA (SETELAH USER LOGIN)
+# ----------------------------------------------------
+current_user = st.session_state["username"]
+user_fullname = st.session_state["user_fullname"]
+
+st.sidebar.title(f"👤 Halo, {user_fullname}!")
+st.sidebar.caption(f"Logged as: @{current_user}")
+
+if st.sidebar.button("🚪 Logout / Keluar"):
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+    st.session_state["user_fullname"] = ""
+    st.rerun()
+
+st.sidebar.markdown("---")
+if st.sidebar.button("🔄 Sync Data Google Sheets"):
+    st.session_state["df_users"] = load_worksheet("Users", COLS_USERS)
+    st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
+    st.session_state["df_habits"] = load_worksheet("Habits_Logs", COLS_HABITS)
+    st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
+    st.rerun()
+
+st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Progress Tracker")
+
 PROGRAM_DATA = {
     "Upper A": [
         {"Exercise": "Bench Press", "Set Target": 3, "Reps Target": "6-8", "RIR Target": "1-2"},
@@ -112,16 +185,6 @@ PROGRAM_DATA = {
     ]
 }
 
-# ----------------------------------------------------
-# 4. NAVIGASI SIDEBAR & REFRESH BUTTON
-# ----------------------------------------------------
-st.sidebar.title("📌 Menu Navigation")
-if st.sidebar.button("🔄 Sync / Refresh dari Google Sheets"):
-    st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
-    st.session_state["df_habits"] = load_worksheet("Habits_Logs", COLS_HABITS)
-    st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
-    st.rerun()
-
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
     ["📋 Program Latihan", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats"]
@@ -149,22 +212,17 @@ elif "Input Workout Log" in menu:
     c1, c2, c3 = st.columns(3)
     tanggal = c1.date_input("Tanggal", datetime.date.today())
     hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
-    
-    # Ditambahkan opsi "Running" dan "Custom Strength"
     sesi = c3.selectbox("Sesi Latihan", ["Upper A", "Lower A", "Upper B", "Lower B", "Running", "Custom Strength"])
 
-    # Menentukan pilihan dropdown gerakan berdasarkan sesi
     if sesi == "Running":
         dropdown_options = ["Easy Run", "Interval Run", "Tempo Run", "Long Run", "Treadmill Run", "(Ketik Manual)"]
     elif sesi in PROGRAM_DATA:
-        program_exercises = [e["Exercise"] for e in PROGRAM_DATA[sesi]]
-        dropdown_options = program_exercises + ["(Ketik Manual)"]
+        dropdown_options = [e["Exercise"] for e in PROGRAM_DATA[sesi]] + ["(Ketik Manual)"]
     else:
         dropdown_options = ["(Ketik Manual)", "Bench Press", "Squat", "Deadlift", "Overhead Press", "Pull Up"]
 
     exercise_choice = st.selectbox("Pilih Gerakan / Jenis Lari", dropdown_options)
     
-    # Kolom Ketik Manual
     if exercise_choice == "(Ketik Manual)":
         exercise_custom = st.text_input("Nama Gerakan / Sesi (Ketik Manual)")
         exercise_final = exercise_custom.strip()
@@ -173,16 +231,12 @@ elif "Input Workout Log" in menu:
 
     st.markdown("---")
 
-    # ------------------------------------------------
-    # FORM DINAMIS: RUNNING vs GYM
-    # ------------------------------------------------
     if sesi == "Running":
         st.markdown("### 🏃‍♂️ Parameter Running")
         rc1, rc2, rc3 = st.columns(3)
         jarak = rc1.number_input("Jarak Lari (km)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
         waktu_menit = rc2.number_input("Waktu Tempuh (Menit)", min_value=1.0, value=30.0, step=0.5)
         
-        # Hitung Pace Otomatis (min/km)
         if jarak > 0:
             pace_decimal = waktu_menit / jarak
             pace_min = int(pace_decimal)
@@ -205,24 +259,23 @@ elif "Input Workout Log" in menu:
                 st.error("⚠️ Silakan pilih atau ketik jenis lari terlebih dahulu!")
             else:
                 new_entry = {
+                    "User": current_user,
                     "Tanggal": tanggal.strftime("%Y-%m-%d"), 
                     "Hari": hari, 
                     "Sesi": sesi,
                     "Exercise": exercise_final, 
                     "Set": 1, 
                     "Reps": f"{waktu_menit} min", 
-                    "Beban (kg)": jarak,    # Simpan angka jarak di kolom Beban (kg)
-                    "RIR": pace_str,        # Simpan teks Pace di kolom RIR
+                    "Beban (kg)": jarak, 
+                    "RIR": pace_str, 
                     "RPE": rpe, 
                     "Catatan": catatan
                 }
                 df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
-                success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                if success:
-                    st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km @ {pace_str}) berhasil tersimpan!")
+                save_worksheet(df_updated, "Workout_Logs", "df_workout")
+                st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km) tersimpan!")
 
     else:
-        # Sesi Gym / Strength Standard
         st.markdown("### 🏋️‍♂️ Parameter Angkatan")
         c4, c5, c6, c7, c8 = st.columns(5)
         set_num = c4.number_input("Set Ke-", min_value=1, value=1)
@@ -238,6 +291,7 @@ elif "Input Workout Log" in menu:
                 st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
             else:
                 new_entry = {
+                    "User": current_user,
                     "Tanggal": tanggal.strftime("%Y-%m-%d"), 
                     "Hari": hari, 
                     "Sesi": sesi,
@@ -250,32 +304,20 @@ elif "Input Workout Log" in menu:
                     "Catatan": catatan
                 }
                 df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
-                success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                if success:
-                    st.success(f"✅ Set {set_num} ({exercise_final}) berhasil tersimpan!")
+                save_worksheet(df_updated, "Workout_Logs", "df_workout")
+                st.success(f"✅ Set {set_num} ({exercise_final}) tersimpan!")
 
     st.markdown("---")
-    st.subheader("📜 Riwayat Workout & Running Log")
+    st.subheader(f"📜 Riwayat Workout & Running (@{current_user})")
     
-    df_workout = st.session_state["df_workout"]
-    if not df_workout.empty:
-        st.dataframe(df_workout, use_container_width=True)
-        
-        col_del1, col_del2 = st.columns(2)
-        with col_del1:
-            if st.button("↩️ Hapus Set/Lari Terakhir (Undo)"):
-                df_updated = df_workout.iloc[:-1]
-                save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                st.rerun()
-                
-        with col_del2:
-            row_to_delete = st.number_input("Hapus Baris Indeks Ke-:", min_value=0, max_value=max(0, len(df_workout)-1), step=1)
-            if st.button("🗑️ Hapus Baris Ini"):
-                df_updated = df_workout.drop(index=row_to_delete).reset_index(drop=True)
-                save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                st.rerun()
+    # FILTER HANYA UNTUK USER YANG SEDANG LOGIN
+    df_all_workout = st.session_state["df_workout"]
+    df_user_workout = df_all_workout[df_all_workout["User"] == current_user].reset_index(drop=True)
+    
+    if not df_user_workout.empty:
+        st.dataframe(df_user_workout, use_container_width=True)
     else:
-        st.info("Belum ada data latihan / running terdaftar di Google Sheets.")
+        st.info("Belum ada data latihan / running terdaftar untuk akun kamu.")
 
 # ----------------------------------------------------
 # MENU 3: DAILY HABITS
@@ -301,6 +343,7 @@ elif "Daily Habits" in menu:
 
     if st.button("💾 Simpan Kebiasaan Harian", type="primary"):
         h_entry = {
+            "User": current_user,
             "Tanggal": tgl.strftime("%Y-%m-%d"), 
             "Latihan": latihan, 
             "Protein": protein,
@@ -315,8 +358,9 @@ elif "Daily Habits" in menu:
         save_worksheet(df_updated, "Habits_Logs", "df_habits")
 
     st.markdown("---")
-    st.subheader("📜 Riwayat Kebiasaan Harian")
-    st.dataframe(st.session_state["df_habits"], use_container_width=True)
+    st.subheader(f"📜 Riwayat Kebiasaan Harian (@{current_user})")
+    df_user_habits = st.session_state["df_habits"][st.session_state["df_habits"]["User"] == current_user]
+    st.dataframe(df_user_habits, use_container_width=True)
 
 # ----------------------------------------------------
 # MENU 4: PROGRESS MINGGUAN
@@ -337,6 +381,7 @@ elif "Progress Mingguan" in menu:
 
     if st.button("📌 Simpan Rekap Mingguan", type="primary"):
         w_entry = {
+            "User": current_user,
             "Minggu": minggu, 
             "Latihan Upper": up, 
             "Latihan Lower": low,
@@ -350,25 +395,26 @@ elif "Progress Mingguan" in menu:
         save_worksheet(df_updated, "Weekly_Logs", "df_weekly")
 
     st.markdown("---")
-    st.subheader("📜 Riwayat Evaluasi Mingguan")
-    st.dataframe(st.session_state["df_weekly"], use_container_width=True)
+    st.subheader(f"📜 Riwayat Evaluasi Mingguan (@{current_user})")
+    df_user_weekly = st.session_state["df_weekly"][st.session_state["df_weekly"]["User"] == current_user]
+    st.dataframe(df_user_weekly, use_container_width=True)
 
 # ----------------------------------------------------
 # MENU 5: DASHBOARD STATS
 # ----------------------------------------------------
 elif "Dashboard Stats" in menu:
-    st.subheader("📊 Dashboard & Grafik Progress")
+    st.subheader(f"📊 Dashboard Progress (@{current_user})")
     
-    df_workout = st.session_state["df_workout"]
-    if not df_workout.empty:
-        # Pisahkan Data Gym dan Running
-        df_gym = df_workout[df_workout["Sesi"] != "Running"].copy()
-        df_run = df_workout[df_workout["Sesi"] == "Running"].copy()
+    df_all_workout = st.session_state["df_workout"]
+    df_user_workout = df_all_workout[df_all_workout["User"] == current_user]
+
+    if not df_user_workout.empty:
+        df_gym = df_user_workout[df_user_workout["Sesi"] != "Running"].copy()
+        df_run = df_user_workout[df_user_workout["Sesi"] == "Running"].copy()
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Set Gym", len(df_gym))
         
-        # Hitung Volume Gym
         if not df_gym.empty:
             df_gym["Beban_num"] = pd.to_numeric(df_gym["Beban (kg)"], errors='coerce').fillna(0)
             df_gym["Reps_num"] = pd.to_numeric(df_gym["Reps"], errors='coerce').fillna(0)
@@ -377,7 +423,6 @@ elif "Dashboard Stats" in menu:
         else:
             col2.metric("Total Volume Gym", "0 kg")
 
-        # Hitung Total Jarak Running
         if not df_run.empty:
             df_run["Jarak_num"] = pd.to_numeric(df_run["Beban (kg)"], errors='coerce').fillna(0)
             total_km = df_run["Jarak_num"].sum()
@@ -385,19 +430,17 @@ elif "Dashboard Stats" in menu:
         else:
             col3.metric("Total Jarak Lari", "0 km")
 
-        col4.metric("Variasi Gerakan", df_workout["Exercise"].nunique())
+        col4.metric("Variasi Gerakan", df_user_workout["Exercise"].nunique())
 
         st.markdown("---")
         
-        # Grafik Progressive Overload (Gym)
         if not df_gym.empty:
-            st.subheader("📈 Kenaikan Beban Angkatan Gym (Progressive Overload)")
+            st.subheader("📈 Kenaikan Beban Angkatan Gym")
             st.line_chart(df_gym, x="Tanggal", y="Beban (kg)", color="Exercise")
 
-        # Grafik Progress Jarak Running
         if not df_run.empty:
             st.subheader("🏃‍♂️ Progress Jarak Lari (km)")
             st.line_chart(df_run, x="Tanggal", y="Beban (kg)", color="Exercise")
 
     else:
-        st.warning("⚠️ Belum ada data latihan / running yang dicatat.")
+        st.warning("⚠️ Belum ada data latihan / running yang dicatat untuk akun kamu.")
