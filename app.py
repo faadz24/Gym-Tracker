@@ -31,7 +31,8 @@ def load_worksheet(worksheet_name, default_cols):
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
             df = conn.read(worksheet=worksheet_name, ttl=0)
-            if df is not None and not df.empty:
+            if df is not None:
+                # Otomatis tambahkan kolom yang belum ada agar tidak error
                 for col in default_cols:
                     if col not in df.columns:
                         df[col] = ""
