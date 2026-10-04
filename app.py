@@ -14,84 +14,59 @@ st.set_page_config(
 st.title("🏋️‍♂️ Gym Upper/Lower Progress Tracker")
 
 # ----------------------------------------------------
-# 2. SAFE LOAD MODULE (GSHEETS / LOCAL FALLBACK)
+# 2. CEK & KONEKSI GOOGLE SHEETS
 # ----------------------------------------------------
 GSHEETS_AVAILABLE = False
 try:
     from streamlit_gsheets import GSheetsConnection
     GSHEETS_AVAILABLE = True
 except ModuleNotFoundError:
-    st.warning("⚠️ Modul 'st-gsheets-connection' belum ter-install. Memakai mode penyimpanan lokal.")
+    st.error("⚠️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
 
-# ----------------------------------------------------
-# 3. KONEKSI GOOGLE SHEETS & HELPER FUNCTIONS
-# ----------------------------------------------------
 COLS_WORKOUT = ["Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
 COLS_HABITS = ["Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
 COLS_WEEKLY = ["Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
 
-# Init Session State
-if "data_loaded" not in st.session_state:
-    st.session_state["data_loaded"] = False
-
-if "df_workout" not in st.session_state:
-    st.session_state["df_workout"] = pd.DataFrame(columns=COLS_WORKOUT)
-if "df_habits" not in st.session_state:
-    st.session_state["df_habits"] = pd.DataFrame(columns=COLS_HABITS)
-if "df_weekly" not in st.session_state:
-    st.session_state["df_weekly"] = pd.DataFrame(columns=COLS_WEEKLY)
-
-# Sync data dari Google Sheets HANYA SEKALI saat pertama kali aplikasi dibuka
-if GSHEETS_AVAILABLE and not st.session_state["data_loaded"]:
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # Load Workout
+def load_worksheet(worksheet_name, default_cols):
+    if GSHEETS_AVAILABLE:
         try:
-            df_w = conn.read(worksheet="Workout_Logs", ttl="0")
-            if df_w is not None and not df_w.empty:
-                for col in COLS_WORKOUT:
-                    if col not in df_w.columns: df_w[col] = ""
-                st.session_state["df_workout"] = df_w[COLS_WORKOUT]
-        except Exception:
-            pass
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df = conn.read(worksheet=worksheet_name, ttl=0)
+            if df is not None and not df.empty:
+                for col in default_cols:
+                    if col not in df.columns:
+                        df[col] = ""
+                return df[default_cols]
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Gagal membaca tab '{worksheet_name}': {e}")
+    return pd.DataFrame(columns=default_cols)
 
-        # Load Habits
-        try:
-            df_h = conn.read(worksheet="Habits_Logs", ttl="0")
-            if df_h is not None and not df_h.empty:
-                for col in COLS_HABITS:
-                    if col not in df_h.columns: df_h[col] = ""
-                st.session_state["df_habits"] = df_h[COLS_HABITS]
-        except Exception:
-            pass
-
-        # Load Weekly
-        try:
-            df_wk = conn.read(worksheet="Weekly_Logs", ttl="0")
-            if df_wk is not None and not df_wk.empty:
-                for col in COLS_WEEKLY:
-                    if col not in df_wk.columns: df_wk[col] = ""
-                st.session_state["df_weekly"] = df_wk[COLS_WEEKLY]
-        except Exception:
-            pass
-
-        st.session_state["data_loaded"] = True
-    except Exception:
-        st.session_state["data_loaded"] = True
-
-def save_data(df, worksheet_name, state_key):
+def save_worksheet(df, worksheet_name, state_key):
     st.session_state[state_key] = df
     if GSHEETS_AVAILABLE:
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
             conn.update(worksheet=worksheet_name, data=df)
-            st.toast(f"✅ Data tersimpan ke Google Sheets ({worksheet_name})!")
+            st.toast(f"✅ Berhasil disimpan ke Google Sheets ({worksheet_name})!")
+            return True
         except Exception as e:
-            st.warning(f"⚠️ Data tersimpan di aplikasi lokal, namun gagal kirim ke Google Sheets: {e}")
+            st.error(f"❌ GAGAL SIMPAN KE GOOGLE SHEETS: {e}")
+            st.info("💡 Pastikan email Service Account sudah dijadikan 'Editor' di Google Sheets kamu!")
+            return False
+    return False
+
+# Load data awal ke session state jika belum ada
+if "df_workout" not in st.session_state:
+    st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
+
+if "df_habits" not in st.session_state:
+    st.session_state["df_habits"] = load_worksheet("Habits_Logs", COLS_HABITS)
+
+if "df_weekly" not in st.session_state:
+    st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
 
 # ----------------------------------------------------
-# 4. DATABASE PROGRAM LATIHAN
+# 3. DATABASE PROGRAM LATIHAN
 # ----------------------------------------------------
 PROGRAM_DATA = {
     "Upper A": [
@@ -138,10 +113,17 @@ PROGRAM_DATA = {
 }
 
 # ----------------------------------------------------
-# 5. NAVIGASI SIDEBAR
+# 4. NAVIGASI SIDEBAR & REFRESH BUTTON
 # ----------------------------------------------------
+st.sidebar.title("📌 Menu Navigation")
+if st.sidebar.button("🔄 Sync / Refresh dari Google Sheets"):
+    st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
+    st.session_state["df_habits"] = load_worksheet("Habits_Logs", COLS_HABITS)
+    st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
+    st.rerun()
+
 menu = st.sidebar.radio(
-    "📍 Navigasi Menu", 
+    "Pilih Halaman:", 
     ["📋 Program Latihan", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats"]
 )
 
@@ -206,8 +188,9 @@ elif "Input Workout Log" in menu:
                 "Catatan": catatan
             }
             df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
-            save_data(df_updated, "Workout_Logs", "df_workout")
-            st.success(f"✅ Set {set_num} ({exercise_final}) berhasil disimpan!")
+            success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
+            if success:
+                st.success(f"✅ Set {set_num} ({exercise_final}) berhasil tersimpan permanen di Google Sheets!")
 
     st.markdown("---")
     st.subheader("📜 Riwayat Workout Log")
@@ -220,17 +203,17 @@ elif "Input Workout Log" in menu:
         with col_del1:
             if st.button("↩️ Hapus Set Terakhir (Undo)"):
                 df_updated = df_workout.iloc[:-1]
-                save_data(df_updated, "Workout_Logs", "df_workout")
+                save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
                 
         with col_del2:
             row_to_delete = st.number_input("Hapus Baris Indeks Ke-:", min_value=0, max_value=max(0, len(df_workout)-1), step=1)
             if st.button("🗑️ Hapus Baris Ini"):
                 df_updated = df_workout.drop(index=row_to_delete).reset_index(drop=True)
-                save_data(df_updated, "Workout_Logs", "df_workout")
+                save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 st.rerun()
     else:
-        st.info("Belum ada data latihan terdaftar.")
+        st.info("Belum ada data latihan terdaftar di Google Sheets.")
 
 # ----------------------------------------------------
 # MENU 3: DAILY HABITS
@@ -267,8 +250,7 @@ elif "Daily Habits" in menu:
             "Catatan": cat
         }
         df_updated = pd.concat([st.session_state["df_habits"], pd.DataFrame([h_entry])], ignore_index=True)
-        save_data(df_updated, "Habits_Logs", "df_habits")
-        st.success("✅ Kebiasaan harian berhasil disimpan!")
+        save_worksheet(df_updated, "Habits_Logs", "df_habits")
 
     st.markdown("---")
     st.subheader("📜 Riwayat Kebiasaan Harian")
@@ -303,8 +285,7 @@ elif "Progress Mingguan" in menu:
             "Catatan": cat_w
         }
         df_updated = pd.concat([st.session_state["df_weekly"], pd.DataFrame([w_entry])], ignore_index=True)
-        save_data(df_updated, "Weekly_Logs", "df_weekly")
-        st.success("✅ Rekap mingguan berhasil disimpan!")
+        save_worksheet(df_updated, "Weekly_Logs", "df_weekly")
 
     st.markdown("---")
     st.subheader("📜 Riwayat Evaluasi Mingguan")
@@ -329,4 +310,4 @@ elif "Dashboard Stats" in menu:
         st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
         st.line_chart(df_workout, x="Tanggal", y="Beban (kg)", color="Exercise")
     else:
-        st.warning("⚠️ Belum ada data latihan yang dicatat.")
+        st.warning("⚠️ Belum ada data latihan yang dicatat di Google Sheets.")
