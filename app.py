@@ -226,15 +226,12 @@ elif "Dashboard Stats" in menu:
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Set Dicatat", len(df_w))
         
-        # Hitung Total Volume (Beban x Reps)
         vol = (df_w["Beban (kg)"].astype(float) * df_w["Reps"].astype(float)).sum()
         col2.metric("Total Volume Angkatan", f"{vol:,.0f} kg")
         col3.metric("Jumlah Variasi Gerakan", df_w["Exercise"].nunique())
 
         st.markdown("---")
         st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
-        st.markdown("---")
-     st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
-     st.line_chart(df_w, x="Tanggal", y="Beban (kg)", color="Exercise")
+        st.line_chart(df_w, x="Tanggal", y="Beban (kg)", color="Exercise")
     else:
         st.warning("⚠️ Belum ada data latihan yang dicatat. Silakan isi dulu melalui menu 'Input Workout Log'.")
