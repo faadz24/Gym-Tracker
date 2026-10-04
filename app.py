@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import plotly.express as px
 
 # 1. Konfigurasi Halaman Aplikasi
 st.set_page_config(
@@ -234,14 +233,8 @@ elif "Dashboard Stats" in menu:
 
         st.markdown("---")
         st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
-        fig = px.line(
-            df_w, 
-            x="Tanggal", 
-            y="Beban (kg)", 
-            color="Exercise", 
-            markers=True, 
-            title="Tren Perkembangan Beban per Gerakan"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
+     st.subheader("📈 Grafik Kenaikan Beban (Progressive Overload)")
+     st.line_chart(df_w, x="Tanggal", y="Beban (kg)", color="Exercise")
     else:
         st.warning("⚠️ Belum ada data latihan yang dicatat. Silakan isi dulu melalui menu 'Input Workout Log'.")
