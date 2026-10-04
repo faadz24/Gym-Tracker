@@ -31,46 +31,64 @@ COLS_HABITS = ["Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Ti
 COLS_WEEKLY = ["Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
 
 # Init Session State
-for key, cols in [("df_workout", COLS_WORKOUT), ("df_habits", COLS_HABITS), ("df_weekly", COLS_WEEKLY)]:
-    if key not in st.session_state:
-        st.session_state[key] = pd.DataFrame(columns=cols)
+if "data_loaded" not in st.session_state:
+    st.session_state["data_loaded"] = False
 
-if GSHEETS_AVAILABLE:
+if "df_workout" not in st.session_state:
+    st.session_state["df_workout"] = pd.DataFrame(columns=COLS_WORKOUT)
+if "df_habits" not in st.session_state:
+    st.session_state["df_habits"] = pd.DataFrame(columns=COLS_HABITS)
+if "df_weekly" not in st.session_state:
+    st.session_state["df_weekly"] = pd.DataFrame(columns=COLS_WEEKLY)
+
+# Sync data dari Google Sheets HANYA SEKALI saat pertama kali aplikasi dibuka
+if GSHEETS_AVAILABLE and not st.session_state["data_loaded"]:
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        def load_data(sheet_name, default_cols):
-            try:
-                df = conn.read(worksheet=sheet_name, ttl="0")
-                if df is not None and not df.empty:
-                    for col in default_cols:
-                        if col not in df.columns:
-                            df[col] = ""
-                    return df[default_cols]
-                return pd.DataFrame(columns=default_cols)
-            except Exception:
-                return pd.DataFrame(columns=default_cols)
         
-        df_workout = load_data("Workout_Logs", COLS_WORKOUT)
-        df_habits = load_data("Habits_Logs", COLS_HABITS)
-        df_weekly = load_data("Weekly_Logs", COLS_WEEKLY)
-    except Exception as e:
-        df_workout = st.session_state["df_workout"]
-        df_habits = st.session_state["df_habits"]
-        df_weekly = st.session_state["df_weekly"]
-else:
-    df_workout = st.session_state["df_workout"]
-    df_habits = st.session_state["df_habits"]
-    df_weekly = st.session_state["df_weekly"]
+        # Load Workout
+        try:
+            df_w = conn.read(worksheet="Workout_Logs", ttl="0")
+            if df_w is not None and not df_w.empty:
+                for col in COLS_WORKOUT:
+                    if col not in df_w.columns: df_w[col] = ""
+                st.session_state["df_workout"] = df_w[COLS_WORKOUT]
+        except Exception:
+            pass
+
+        # Load Habits
+        try:
+            df_h = conn.read(worksheet="Habits_Logs", ttl="0")
+            if df_h is not None and not df_h.empty:
+                for col in COLS_HABITS:
+                    if col not in df_h.columns: df_h[col] = ""
+                st.session_state["df_habits"] = df_h[COLS_HABITS]
+        except Exception:
+            pass
+
+        # Load Weekly
+        try:
+            df_wk = conn.read(worksheet="Weekly_Logs", ttl="0")
+            if df_wk is not None and not df_wk.empty:
+                for col in COLS_WEEKLY:
+                    if col not in df_wk.columns: df_wk[col] = ""
+                st.session_state["df_weekly"] = df_wk[COLS_WEEKLY]
+        except Exception:
+            pass
+
+        st.session_state["data_loaded"] = True
+    except Exception:
+        st.session_state["data_loaded"] = True
 
 def save_data(df, worksheet_name, state_key):
     st.session_state[state_key] = df
     if GSHEETS_AVAILABLE:
         try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
             conn.update(worksheet=worksheet_name, data=df)
-            st.toast("✅ Data berhasil disimpan ke Google Sheets!")
+            st.toast(f"✅ Data tersimpan ke Google Sheets ({worksheet_name})!")
         except Exception as e:
-            st.error(f"❌ Gagal menyimpan ke Google Sheets: {e}")
-            st.info("Data disimpan sementara di memori aplikasi.")
+            st.warning(f"⚠️ Data tersimpan di aplikasi lokal, namun gagal kirim ke Google Sheets: {e}")
 
 # ----------------------------------------------------
 # 4. DATABASE PROGRAM LATIHAN
@@ -154,48 +172,47 @@ elif "Input Workout Log" in menu:
     program_exercises = [e["Exercise"] for e in PROGRAM_DATA.get(sesi, [])]
     dropdown_options = program_exercises + ["(Ketik Manual)"]
 
-    with st.form("form_workout", clear_on_submit=False):
-        exercise_choice = st.selectbox("Pilih Gerakan dari Program", dropdown_options)
-        
-        if exercise_choice == "(Ketik Manual)":
-            exercise_custom = st.text_input("Nama Gerakan (Ketik Manual)")
-            exercise_final = exercise_custom.strip()
+    exercise_choice = st.selectbox("Pilih Gerakan dari Program", dropdown_options)
+    
+    if exercise_choice == "(Ketik Manual)":
+        exercise_custom = st.text_input("Nama Gerakan (Ketik Manual)")
+        exercise_final = exercise_custom.strip()
+    else:
+        exercise_final = exercise_choice
+
+    c4, c5, c6, c7, c8 = st.columns(5)
+    set_num = c4.number_input("Set Ke-", min_value=1, value=1)
+    reps = c5.number_input("Reps (Ulang)", min_value=1, value=10)
+    beban = c6.number_input("Beban (kg)", min_value=0.0, value=20.0, step=0.5)
+    rir = c7.number_input("RIR (0-5)", min_value=0, max_value=5, value=2)
+    rpe = c8.number_input("RPE (1-10)", min_value=1, max_value=10, value=10-rir)
+
+    catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
+
+    if st.button("➕ Simpan Set Latihan", type="primary"):
+        if not exercise_final:
+            st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
         else:
-            exercise_final = exercise_choice
-
-        c4, c5, c6, c7, c8 = st.columns(5)
-        set_num = c4.number_input("Set Ke-", min_value=1, value=1)
-        reps = c5.number_input("Reps (Ulang)", min_value=1, value=10)
-        beban = c6.number_input("Beban (kg)", min_value=0.0, value=20.0, step=0.5)
-        rir = c7.number_input("RIR (0-5)", min_value=0, max_value=5, value=2)
-        rpe = c8.number_input("RPE (1-10)", min_value=1, max_value=10, value=10-rir)
-
-        catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
-        submitted = st.form_submit_button("➕ Simpan Set Latihan")
-
-        if submitted:
-            if not exercise_final:
-                st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
-            else:
-                new_entry = {
-                    "Tanggal": tanggal.strftime("%Y-%m-%d"), 
-                    "Hari": hari, 
-                    "Sesi": sesi,
-                    "Exercise": exercise_final, 
-                    "Set": set_num, 
-                    "Reps": reps,
-                    "Beban (kg)": beban, 
-                    "RIR": rir, 
-                    "RPE": rpe, 
-                    "Catatan": catatan
-                }
-                df_updated = pd.concat([df_workout, pd.DataFrame([new_entry])], ignore_index=True)
-                save_data(df_updated, "Workout_Logs", "df_workout")
-                st.rerun()
+            new_entry = {
+                "Tanggal": tanggal.strftime("%Y-%m-%d"), 
+                "Hari": hari, 
+                "Sesi": sesi,
+                "Exercise": exercise_final, 
+                "Set": set_num, 
+                "Reps": reps,
+                "Beban (kg)": beban, 
+                "RIR": rir, 
+                "RPE": rpe, 
+                "Catatan": catatan
+            }
+            df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
+            save_data(df_updated, "Workout_Logs", "df_workout")
+            st.success(f"✅ Set {set_num} ({exercise_final}) berhasil disimpan!")
 
     st.markdown("---")
-    st.subheader("📜 Riwayat Workout Log & Hapus Data")
+    st.subheader("📜 Riwayat Workout Log")
     
+    df_workout = st.session_state["df_workout"]
     if not df_workout.empty:
         st.dataframe(df_workout, use_container_width=True)
         
@@ -221,43 +238,41 @@ elif "Input Workout Log" in menu:
 elif "Daily Habits" in menu:
     st.subheader("🥗 Daily Habits Tracker (Kebiasaan Harian)")
     
-    with st.form("form_habits"):
-        tgl = st.date_input("Tanggal", datetime.date.today())
-        
-        c1, c2, c3 = st.columns(3)
-        latihan = c1.checkbox("Latihan Selesai")
-        protein = c2.checkbox("Protein Tiap Makan Utama")
-        buah = c3.checkbox("Buah / Sayur Terpenuhi")
-        
-        c4, c5 = st.columns(2)
-        minum = c4.checkbox("Minum Cukup Air")
-        tidur = c5.checkbox("Tidur Cukup & Berkualitas")
+    tgl = st.date_input("Tanggal", datetime.date.today())
+    
+    c1, c2, c3 = st.columns(3)
+    latihan = c1.checkbox("Latihan Selesai")
+    protein = c2.checkbox("Protein Tiap Makan Utama")
+    buah = c3.checkbox("Buah / Sayur Terpenuhi")
+    
+    c4, c5 = st.columns(2)
+    minum = c4.checkbox("Minum Cukup Air")
+    tidur = c5.checkbox("Tidur Cukup & Berkualitas")
 
-        e1, e2 = st.columns(2)
-        energi = e1.slider("Level Energi Harian (1-5)", 1, 5, 4)
-        recovery = e2.slider("Level Recovery / Pemulihan (1-5)", 1, 5, 4)
-        cat = st.text_input("Catatan Tambahan Harian")
+    e1, e2 = st.columns(2)
+    energi = e1.slider("Level Energi Harian (1-5)", 1, 5, 4)
+    recovery = e2.slider("Level Recovery / Pemulihan (1-5)", 1, 5, 4)
+    cat = st.text_input("Catatan Tambahan Harian")
 
-        sub_h = st.form_submit_button("💾 Simpan Kebiasaan Harian")
-        if sub_h:
-            h_entry = {
-                "Tanggal": tgl.strftime("%Y-%m-%d"), 
-                "Latihan": latihan, 
-                "Protein": protein,
-                "Buah/Sayur": buah, 
-                "Minum Cukup": minum, 
-                "Tidur Cukup": tidur,
-                "Energi": energi, 
-                "Recovery": recovery, 
-                "Catatan": cat
-            }
-            df_updated = pd.concat([df_habits, pd.DataFrame([h_entry])], ignore_index=True)
-            save_data(df_updated, "Habits_Logs", "df_habits")
-            st.rerun()
+    if st.button("💾 Simpan Kebiasaan Harian", type="primary"):
+        h_entry = {
+            "Tanggal": tgl.strftime("%Y-%m-%d"), 
+            "Latihan": latihan, 
+            "Protein": protein,
+            "Buah/Sayur": buah, 
+            "Minum Cukup": minum, 
+            "Tidur Cukup": tidur,
+            "Energi": energi, 
+            "Recovery": recovery, 
+            "Catatan": cat
+        }
+        df_updated = pd.concat([st.session_state["df_habits"], pd.DataFrame([h_entry])], ignore_index=True)
+        save_data(df_updated, "Habits_Logs", "df_habits")
+        st.success("✅ Kebiasaan harian berhasil disimpan!")
 
     st.markdown("---")
     st.subheader("📜 Riwayat Kebiasaan Harian")
-    st.dataframe(df_habits, use_container_width=True)
+    st.dataframe(st.session_state["df_habits"], use_container_width=True)
 
 # ----------------------------------------------------
 # MENU 4: PROGRESS MINGGUAN
@@ -265,37 +280,35 @@ elif "Daily Habits" in menu:
 elif "Progress Mingguan" in menu:
     st.subheader("📈 Rekap Evaluasi Mingguan")
     
-    with st.form("form_weekly"):
-        minggu = st.text_input("Minggu Ke- / Periode", "Minggu 1")
-        c1, c2, c3 = st.columns(3)
-        up = c1.number_input("Total Sesi Upper Selesai", min_value=0, value=2)
-        low = c2.number_input("Total Sesi Lower Selesai", min_value=0, value=2)
-        tidur_avg = c3.number_input("Tidur Rata-rata (Jam)", value=7.5)
+    minggu = st.text_input("Minggu Ke- / Periode", "Minggu 1")
+    c1, c2, c3 = st.columns(3)
+    up = c1.number_input("Total Sesi Upper Selesai", min_value=0, value=2)
+    low = c2.number_input("Total Sesi Lower Selesai", min_value=0, value=2)
+    tidur_avg = c3.number_input("Tidur Rata-rata (Jam)", value=7.5)
 
-        e1, e2 = st.columns(2)
-        en_avg = e1.slider("Rata-rata Energi Mingguan (1-5)", 1.0, 5.0, 4.0)
-        rec_avg = e2.slider("Rata-rata Recovery Mingguan (1-5)", 1.0, 5.0, 4.0)
-        cat_w = st.text_input("Catatan Progres / Rencana Naik Beban")
+    e1, e2 = st.columns(2)
+    en_avg = e1.slider("Rata-rata Energi Mingguan (1-5)", 1.0, 5.0, 4.0)
+    rec_avg = e2.slider("Rata-rata Recovery Mingguan (1-5)", 1.0, 5.0, 4.0)
+    cat_w = st.text_input("Catatan Progres / Rencana Naik Beban")
 
-        sub_w = st.form_submit_button("📌 Simpan Rekap Mingguan")
-        if sub_w:
-            w_entry = {
-                "Minggu": minggu, 
-                "Latihan Upper": up, 
-                "Latihan Lower": low,
-                "Total Sesi": up + low, 
-                "Tidur Rata-rata": tidur_avg,
-                "Energi": en_avg, 
-                "Recovery": rec_avg, 
-                "Catatan": cat_w
-            }
-            df_updated = pd.concat([df_weekly, pd.DataFrame([w_entry])], ignore_index=True)
-            save_data(df_updated, "Weekly_Logs", "df_weekly")
-            st.rerun()
+    if st.button("📌 Simpan Rekap Mingguan", type="primary"):
+        w_entry = {
+            "Minggu": minggu, 
+            "Latihan Upper": up, 
+            "Latihan Lower": low,
+            "Total Sesi": up + low, 
+            "Tidur Rata-rata": tidur_avg,
+            "Energi": en_avg, 
+            "Recovery": rec_avg, 
+            "Catatan": cat_w
+        }
+        df_updated = pd.concat([st.session_state["df_weekly"], pd.DataFrame([w_entry])], ignore_index=True)
+        save_data(df_updated, "Weekly_Logs", "df_weekly")
+        st.success("✅ Rekap mingguan berhasil disimpan!")
 
     st.markdown("---")
     st.subheader("📜 Riwayat Evaluasi Mingguan")
-    st.dataframe(df_weekly, use_container_width=True)
+    st.dataframe(st.session_state["df_weekly"], use_container_width=True)
 
 # ----------------------------------------------------
 # MENU 5: DASHBOARD STATS
@@ -303,6 +316,7 @@ elif "Progress Mingguan" in menu:
 elif "Dashboard Stats" in menu:
     st.subheader("📊 Dashboard & Grafik Progressive Overload")
     
+    df_workout = st.session_state["df_workout"]
     if not df_workout.empty:
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Set Dicatat", len(df_workout))
