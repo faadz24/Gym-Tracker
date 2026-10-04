@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import base64
 import io
+import time
 from PIL import Image
 
 # ----------------------------------------------------
@@ -15,14 +16,14 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 2. HELPER FUNGSI FOTO PROFIL (BASE64)
+# 2. HELPER FUNGSI
 # ----------------------------------------------------
 def process_and_compress_image(uploaded_file):
     """Mengecilkan foto & mengubah ke string Base64 agar hemat ruang di Google Sheets"""
     try:
         img = Image.open(uploaded_file)
         img = img.convert("RGB")
-        img.thumbnail((200, 200))  # Resize maksimal 200x200 pixel
+        img.thumbnail((200, 200))
         buffered = io.BytesIO()
         img.save(buffered, format="JPEG", quality=80)
         b64_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -30,6 +31,28 @@ def process_and_compress_image(uploaded_file):
     except Exception as e:
         st.error(f"Gagal memproses gambar: {e}")
         return ""
+
+def calculate_1rm(beban, reps):
+    """Menghitung Estimasi 1RM menggunakan Rumus Epley"""
+    try:
+        b = float(beban)
+        r = float(reps)
+        if r <= 0 or b <= 0:
+            return 0.0
+        if r == 1:
+            return round(b, 1)
+        return round(b * (1.0 + (r / 30.0)), 1)
+    except (ValueError, TypeError):
+        return 0.0
+
+def run_rest_timer(seconds):
+    """Timer hitung mundur istirahat antar set"""
+    ph = st.empty()
+    for t in range(seconds, -1, -1):
+        mins, secs = divmod(t, 60)
+        ph.metric("⏱️ Waktu Istirahat Tersisa", f"{mins:02d}:{secs:02d}")
+        time.sleep(1)
+    ph.success("🔔 Waktu Istirahat Selesai! Saatnya Set Berikutnya! 🔥")
 
 # ----------------------------------------------------
 # 3. CEK & KONEKSI GOOGLE SHEETS
@@ -42,7 +65,7 @@ except ModuleNotFoundError:
     st.error("⚠️ Modul 'st-gsheets-connection' belum ter-install di requirements.txt!")
 
 COLS_USERS = ["Username", "Password", "Nama", "Foto"]
-COLS_WORKOUT = ["User", "Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Catatan"]
+COLS_WORKOUT = ["User", "Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Est. 1RM", "Catatan"]
 COLS_HABITS = ["User", "Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
 COLS_WEEKLY = ["User", "Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
 
@@ -96,15 +119,14 @@ if "user_photo" not in st.session_state:
     st.session_state["user_photo"] = ""
 
 # ----------------------------------------------------
-# 4. HALAMAN LOGIN, REGISTER & LUPA PASSWORD
+# 4. HALAMAN LOGIN & REGISTER
 # ----------------------------------------------------
 if not st.session_state["logged_in"]:
     st.title("🏋️‍♂️ Gym & Running Progress Tracker")
     st.subheader("Silakan Login atau Buat Akun Baru")
 
-    tab_login, tab_register, tab_forgot = st.tabs(["🔑 Login", "📝 Buat Akun Baru", "❓ Lupa Password"])
+    tab_login, tab_register = st.tabs(["🔑 Login", "📝 Buat Akun Baru"])
 
-    # TAB LOGIN
     with tab_login:
         login_user = st.text_input("Username", key="login_u").strip().lower()
         login_pass = st.text_input("Password", type="password", key="login_p")
@@ -121,7 +143,6 @@ if not st.session_state["logged_in"]:
             else:
                 st.error("❌ Username atau Password salah!")
 
-    # TAB REGISTER
     with tab_register:
         reg_name = st.text_input("Nama Lengkap", key="reg_n")
         reg_user = st.text_input("Username Baru (Tanpa Spasi)", key="reg_u").strip().lower()
@@ -138,36 +159,6 @@ if not st.session_state["logged_in"]:
                 df_updated = pd.concat([df_u, pd.DataFrame([new_user])], ignore_index=True)
                 save_worksheet(df_updated, "Users", "df_users")
                 st.success("🎉 Akun berhasil dibuat! Silakan pindah ke tab Login untuk masuk.")
-
-    # TAB LUPA PASSWORD
-    with tab_forgot:
-        st.markdown("### 🔑 Reset Password")
-        st.caption("Masukkan username dan nama lengkap sesuai saat pendaftaran untuk reset password.")
-        
-        forgot_user = st.text_input("Username", key="forgot_u").strip().lower()
-        forgot_name = st.text_input("Nama Lengkap (Sesuai Akun)", key="forgot_n").strip()
-        forgot_new_pass = st.text_input("Password Baru", type="password", key="forgot_p")
-        forgot_confirm_pass = st.text_input("Konfirmasi Password Baru", type="password", key="forgot_cp")
-
-        if st.button("🔑 Reset Password", type="primary"):
-            if not forgot_user or not forgot_name or not forgot_new_pass:
-                st.error("⚠️ Semua kolom wajib diisi!")
-            elif forgot_new_pass != forgot_confirm_pass:
-                st.error("❌ Konfirmasi password baru tidak cocok!")
-            else:
-                df_u = st.session_state["df_users"]
-                # Verifikasi Username & Nama Lengkap (case-insensitive)
-                mask = (df_u["Username"].astype(str).str.lower() == forgot_user) & (df_u["Nama"].astype(str).str.strip().str.lower() == forgot_name.lower())
-                matched_user = df_u[mask]
-
-                if matched_user.empty:
-                    st.error("❌ Username atau Nama Lengkap tidak cocok dengan data kami!")
-                else:
-                    target_idx = matched_user.index[0]
-                    df_u.loc[target_idx, "Password"] = forgot_new_pass
-                    success = save_worksheet(df_u, "Users", "df_users")
-                    if success:
-                        st.success("🎉 Password berhasil diperbarui! Silakan kembali ke tab **🔑 Login** untuk masuk.")
 
     st.stop()
 
@@ -202,7 +193,7 @@ if st.sidebar.button("🔄 Sync Data Google Sheets"):
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
     st.rerun()
 
-st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Progress Tracker")
+st.title("🏋️️‍♂️ Gym & 🏃‍♂️ Running Progress Tracker")
 
 PROGRAM_DATA = {
     "Upper A": [
@@ -270,7 +261,7 @@ if "Program Latihan" in menu:
 # MENU 2: INPUT WORKOUT LOG
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
-    st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Sesi Latihan & Running Harian")
+    st.subheader("🏋️‍♂️ / 🏃‍♂️️ Catat Sesi Latihan & Running Harian")
     
     c1, c2, c3 = st.columns(3)
     tanggal = c1.date_input("Tanggal", datetime.date.today())
@@ -332,6 +323,7 @@ elif "Input Workout Log" in menu:
                     "Beban (kg)": jarak, 
                     "RIR": pace_str, 
                     "RPE": rpe, 
+                    "Est. 1RM": "-",
                     "Catatan": catatan
                 }
                 df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
@@ -347,12 +339,28 @@ elif "Input Workout Log" in menu:
         rir = c7.number_input("RIR (0-5)", min_value=0, max_value=5, value=2)
         rpe = c8.number_input("RPE (1-10)", min_value=1, max_value=10, value=10-rir)
 
+        est_1rm_val = calculate_1rm(beban, reps)
+        st.caption(f"💡 **Est. 1RM (Satu Angkatan Maksimal):** {est_1rm_val} kg")
+
         catatan = st.text_input("Catatan Set / Form / Sensasi Otot")
 
         if st.button("➕ Simpan Set Latihan", type="primary"):
             if not exercise_final:
                 st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
             else:
+                # 🥇 CEK PERSONAL RECORD (PR)
+                df_all = st.session_state["df_workout"]
+                mask_ex = (df_all["User"] == current_user) & (df_all["Exercise"] == exercise_final) & (df_all["Sesi"] != "Running")
+                df_prev_ex = df_all[mask_ex]
+                
+                is_pr = False
+                if not df_prev_ex.empty:
+                    max_prev_beban = pd.to_numeric(df_prev_ex["Beban (kg)"], errors='coerce').max()
+                    if pd.notnull(max_prev_beban) and beban > max_prev_beban and beban > 0:
+                        is_pr = True
+                elif beban > 0:
+                    is_pr = True
+
                 new_entry = {
                     "User": current_user,
                     "Tanggal": tanggal.strftime("%Y-%m-%d"), 
@@ -364,11 +372,31 @@ elif "Input Workout Log" in menu:
                     "Beban (kg)": beban, 
                     "RIR": rir, 
                     "RPE": rpe, 
+                    "Est. 1RM": est_1rm_val,
                     "Catatan": catatan
                 }
-                df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
+                df_updated = pd.concat([df_all, pd.DataFrame([new_entry])], ignore_index=True)
                 save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                st.success(f"✅ Set {set_num} ({exercise_final}) tersimpan!")
+
+                if is_pr:
+                    st.balloons()
+                    st.success(f"🎉 **REKOR BARU (PR)!** Kamu berhasil memecahkan rekor angkatan {exercise_final} dengan beban {beban} kg!")
+                else:
+                    st.success(f"✅ Set {set_num} ({exercise_final}) tersimpan!")
+
+        # ⏱️ WIDGET REST TIMER
+        st.markdown("---")
+        with st.expander("⏱️ Timer Istirahat Antar Set (Rest Timer)"):
+            st.caption("Pilih durasi istirahat untuk memulai hitung mundur:")
+            t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+            if t_col1.button("⏱️ 60 Detik"):
+                run_rest_timer(60)
+            if t_col2.button("⏱️ 90 Detik"):
+                run_rest_timer(90)
+            if t_col3.button("⏱️ 120 Detik"):
+                run_rest_timer(120)
+            if t_col4.button("⏱️ 180 Detik"):
+                run_rest_timer(180)
 
     st.markdown("---")
     st.subheader(f"📜 Riwayat Workout & Running (@{current_user})")
@@ -379,23 +407,19 @@ elif "Input Workout Log" in menu:
     if not df_user_workout_idx.empty:
         st.dataframe(df_user_workout_idx.reset_index(drop=True), use_container_width=True)
 
-        with st.expander("🗑️️ Hapus Baris Log Latihan"):
+        with st.expander("🗑️ Hapus Baris Log Latihan"):
             st.caption("Pilih baris log yang salah dimasukkan untuk dihapus secara permanen.")
-            
             log_options = {
                 f"[{row['Tanggal']}] {row['Sesi']} - {row['Exercise']} (Set {row['Set']} | {row['Beban (kg)']}kg x {row['Reps']})": orig_idx 
                 for orig_idx, row in df_user_workout_idx.iterrows()
             }
-            
             selected_log_label = st.selectbox("Pilih log yang ingin dihapus:", list(log_options.keys()))
-            
             if st.button("🔴 Hapus Log Ini", type="secondary"):
                 target_orig_index = log_options[selected_log_label]
                 df_updated = df_all_workout.drop(target_orig_index).reset_index(drop=True)
-                
                 success = save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 if success:
-                    st.success("✅ Log latihan berhasil dihapus dari Google Sheets!")
+                    st.success("✅ Log latihan berhasil dihapus!")
                     st.rerun()
     else:
         st.info("Belum ada data latihan / running terdaftar untuk akun kamu.")
@@ -439,8 +463,27 @@ elif "Daily Habits" in menu:
 
     st.markdown("---")
     st.subheader(f"📜 Riwayat Kebiasaan Harian (@{current_user})")
-    df_user_habits = st.session_state["df_habits"][st.session_state["df_habits"]["User"] == current_user]
-    st.dataframe(df_user_habits, use_container_width=True)
+    df_all_habits = st.session_state["df_habits"]
+    df_user_habits_idx = df_all_habits[df_all_habits["User"] == current_user]
+
+    if not df_user_habits_idx.empty:
+        st.dataframe(df_user_habits_idx.reset_index(drop=True), use_container_width=True)
+
+        with st.expander("🗑️ Hapus Baris Log Kebiasaan"):
+            st.caption("Pilih baris log kebiasaan harian yang ingin dihapus:")
+            habit_options = {
+                f"[{row['Tanggal']}] Energi: {row['Energi']}/5 | Recovery: {row['Recovery']}/5": orig_idx 
+                for orig_idx, row in df_user_habits_idx.iterrows()
+            }
+            selected_h_label = st.selectbox("Pilih log kebiasaan:", list(habit_options.keys()))
+            if st.button("🔴 Hapus Log Kebiasaan Ini", type="secondary"):
+                target_idx = habit_options[selected_h_label]
+                df_updated = df_all_habits.drop(target_idx).reset_index(drop=True)
+                if save_worksheet(df_updated, "Habits_Logs", "df_habits"):
+                    st.success("✅ Log kebiasaan berhasil dihapus!")
+                    st.rerun()
+    else:
+        st.info("Belum ada data kebiasaan harian.")
 
 # ----------------------------------------------------
 # MENU 4: PROGRESS MINGGUAN
@@ -475,8 +518,27 @@ elif "Progress Mingguan" in menu:
 
     st.markdown("---")
     st.subheader(f"📜 Riwayat Evaluasi Mingguan (@{current_user})")
-    df_user_weekly = st.session_state["df_weekly"][st.session_state["df_weekly"]["User"] == current_user]
-    st.dataframe(df_user_weekly, use_container_width=True)
+    df_all_weekly = st.session_state["df_weekly"]
+    df_user_weekly_idx = df_all_weekly[df_all_weekly["User"] == current_user]
+
+    if not df_user_weekly_idx.empty:
+        st.dataframe(df_user_weekly_idx.reset_index(drop=True), use_container_width=True)
+
+        with st.expander("🗑️️ Hapus Baris Rekap Mingguan"):
+            st.caption("Pilih rekap mingguan yang ingin dihapus:")
+            weekly_options = {
+                f"[{row['Minggu']}] Total Sesi: {row['Total Sesi']} | Tidur Avg: {row['Tidur Rata-rata']} Jam": orig_idx 
+                for orig_idx, row in df_user_weekly_idx.iterrows()
+            }
+            selected_w_label = st.selectbox("Pilih rekap mingguan:", list(weekly_options.keys()))
+            if st.button("🔴 Hapus Rekap Mingguan Ini", type="secondary"):
+                target_idx = weekly_options[selected_w_label]
+                df_updated = df_all_weekly.drop(target_idx).reset_index(drop=True)
+                if save_worksheet(df_updated, "Weekly_Logs", "df_weekly"):
+                    st.success("✅ Rekap mingguan berhasil dihapus!")
+                    st.rerun()
+    else:
+        st.info("Belum ada rekap mingguan.")
 
 # ----------------------------------------------------
 # MENU 5: DASHBOARD STATS
@@ -505,18 +567,38 @@ elif "Dashboard Stats" in menu:
             total_km = df_run["Jarak_num"].sum()
             col3.metric("Total Jarak Lari", f"{total_km:.1f} km")
         else:
-            col3.metric("Total Jarak Lari", "0 kg")
+            col3.metric("Total Jarak Lari", "0 km")
 
         col4.metric("Variasi Gerakan", df_user_workout["Exercise"].nunique())
 
         st.markdown("---")
+
+        # 🥇 HIGHLIGHT PERSONAL RECORDS (PR)
         if not df_gym.empty:
-            st.subheader("📈 Kenaikan Beban Angkatan Gym")
+            st.markdown("### 🥇 Rekor Angkatan Terberat (PR)")
+            pr_df = df_gym.groupby("Exercise")["Beban_num"].max().reset_index()
+            pr_df.columns = ["Nama Gerakan", "Beban Terberat (kg)"]
+            st.dataframe(pr_df.sort_values(by="Beban Terberat (kg)", ascending=False), use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.subheader("📈 Progress Beban Angkatan Gym (kg)")
             st.line_chart(df_gym, x="Tanggal", y="Beban (kg)", color="Exercise")
 
         if not df_run.empty:
             st.subheader("🏃‍♂️ Progress Jarak Lari (km)")
             st.line_chart(df_run, x="Tanggal", y="Beban (kg)", color="Exercise")
+
+        # 📥 DOWNLOAD CSV BUTTON
+        st.markdown("---")
+        st.markdown("### 📥 Unduh Arsip Data")
+        csv_data = df_user_workout.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Log Workout (.CSV)",
+            data=csv_data,
+            file_name=f"workout_log_{current_user}.csv",
+            mime="text/csv",
+            type="primary"
+        )
     else:
         st.warning("⚠️ Belum ada data latihan / running yang dicatat untuk akun kamu.")
 
@@ -526,12 +608,11 @@ elif "Dashboard Stats" in menu:
 elif "Pengaturan" in menu:
     st.subheader("⚙️ Pengaturan Akun & Profil")
 
-    tab_profile, tab_security = st.tabs(["👤 Edit Profil & Foto", "🔒 Keamanan & Password"])
+    tab_profile, tab_security, tab_export = st.tabs(["👤 Edit Profil & Foto", "🔒 Keamanan & Password", "📥 Ekspor Data"])
 
     # TAB 1: EDIT PROFIL & FOTO
     with tab_profile:
         st.markdown("### 👤 Ubah Profil Pengguna")
-        
         col_img, col_form = st.columns([1, 3])
         
         with col_img:
@@ -543,7 +624,6 @@ elif "Pengaturan" in menu:
         with col_form:
             st.text_input("Username", value=current_user, disabled=True)
             new_fullname = st.text_input("Nama Lengkap", value=user_fullname)
-            
             uploaded_file = st.file_uploader("Unggah Foto Profil Baru (JPG/PNG)", type=["jpg", "jpeg", "png"])
 
         if st.button("💾 Simpan Perubahan Profil", type="primary"):
@@ -593,3 +673,35 @@ elif "Pengaturan" in menu:
                 success = save_worksheet(df_u, "Users", "df_users")
                 if success:
                     st.success("🎉 Password berhasil diperbarui!")
+
+    # TAB 3: EKSPOR DATA
+    with tab_export:
+        st.markdown("### 📥 Unduh Semua Data Kamu")
+        st.caption("Kamu bisa mengunduh riwayat lengkap dalam format file `.csv` kapan saja.")
+
+        df_u_w = st.session_state["df_workout"][st.session_state["df_workout"]["User"] == current_user]
+        df_u_h = st.session_state["df_habits"][st.session_state["df_habits"]["User"] == current_user]
+        df_u_wk = st.session_state["df_weekly"][st.session_state["df_weekly"]["User"] == current_user]
+
+        col_d1, col_d2, col_d3 = st.columns(3)
+        with col_d1:
+            st.download_button(
+                "📥 Log Workout (.csv)", 
+                data=df_u_w.to_csv(index=False).encode('utf-8'),
+                file_name=f"workout_{current_user}.csv", 
+                mime="text/csv"
+            )
+        with col_d2:
+            st.download_button(
+                "📥 Daily Habits (.csv)", 
+                data=df_u_h.to_csv(index=False).encode('utf-8'),
+                file_name=f"habits_{current_user}.csv", 
+                mime="text/csv"
+            )
+        with col_d3:
+            st.download_button(
+                "📥 Progress Mingguan (.csv)", 
+                data=df_u_wk.to_csv(index=False).encode('utf-8'),
+                file_name=f"weekly_{current_user}.csv", 
+                mime="text/csv"
+            )
