@@ -7,13 +7,30 @@ import time
 from PIL import Image
 
 # ----------------------------------------------------
-# 1. KONFIGURASI HALAMAN APLIKASI
+# KONFIGURASI HALAMAN
 # ----------------------------------------------------
 st.set_page_config(
     page_title="Gym & Running Progress Tracker", 
     layout="wide", 
     page_icon="🏋️‍♂️"
 )
+
+# ----------------------------------------------------
+# SEMBUNYIKAN HEADER, TOOLBAR, DAN FOOTER STREAMLIT
+# ----------------------------------------------------
+hide_streamlit_style = """
+    <style>
+    /* Sembunyikan seluruh header bar atas (Share, GitHub, Edit, dll) */
+    header {visibility: hidden;}
+    
+    /* Sembunyikan footer "Made with Streamlit" di bawah */
+    footer {visibility: hidden;}
+    
+    /* Sembunyikan menu titik tiga secara spesifik */
+    #MainMenu {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ----------------------------------------------------
 # 2. HELPER FUNGSI
