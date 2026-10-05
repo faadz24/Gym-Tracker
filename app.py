@@ -7,20 +7,24 @@ import time
 from PIL import Image
 
 # ----------------------------------------------------
-# 1. KONFIGURASI HALAMAN & CUSTOM CSS
+# 1. KONFIGURASI HALAMAN (SIDEBAR OTOMATIS TERBUKA)
 # ----------------------------------------------------
 st.set_page_config(
     page_title="Gym & Running Progress Tracker", 
     layout="wide", 
-    page_icon="🏋️‍♂️"
+    page_icon="🏋️‍♂️",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS untuk menyembunyikan header, footer, & menu bawaan Streamlit
+# Custom CSS: Sembunyikan footer & menu titik tiga tanpa mengunci Sidebar
 hide_streamlit_style = """
     <style>
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
     #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden;}
+    .block-container {
+        padding-top: 2rem;
+    }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -29,7 +33,6 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # 2. HELPER FUNGSI
 # ----------------------------------------------------
 def process_and_compress_image(uploaded_file):
-    """Mengecilkan foto & mengubah ke string Base64 agar hemat ruang"""
     try:
         img = Image.open(uploaded_file)
         img = img.convert("RGB")
@@ -43,7 +46,6 @@ def process_and_compress_image(uploaded_file):
         return ""
 
 def calculate_1rm(beban, reps):
-    """Menghitung Estimasi 1RM menggunakan Rumus Epley"""
     try:
         b = float(beban)
         r = float(reps)
@@ -56,7 +58,6 @@ def calculate_1rm(beban, reps):
         return 0.0
 
 def run_rest_timer(seconds):
-    """Timer hitung mundur istirahat antar set"""
     ph = st.empty()
     for t in range(seconds, -1, -1):
         mins, secs = divmod(t, 60)
@@ -65,7 +66,7 @@ def run_rest_timer(seconds):
     ph.success("🔔 Waktu Istirahat Selesai! Saatnya Set Berikutnya! 🔥")
 
 # ----------------------------------------------------
-# 3. CEK & KONEKSI GOOGLE SHEETS
+# 3. KONEKSI GOOGLE SHEETS
 # ----------------------------------------------------
 GSHEETS_AVAILABLE = False
 try:
@@ -84,13 +85,13 @@ def load_worksheet(worksheet_name, default_cols):
         try:
             conn = st.connection("gsheets", type=GSheetsConnection)
             df = conn.read(worksheet=worksheet_name, ttl=0)
-            if df is not None:
+            if df is not None and not df.empty:
                 for col in default_cols:
                     if col not in df.columns:
                         df[col] = ""
-                return df[default_cols]
-        except Exception as e:
-            st.sidebar.warning(f"⚠️ Gagal membaca tab '{worksheet_name}': {e}")
+                return df[default_cols].fillna("")
+        except Exception:
+            pass
     return pd.DataFrame(columns=default_cols)
 
 def save_worksheet(df, worksheet_name, state_key):
@@ -102,11 +103,11 @@ def save_worksheet(df, worksheet_name, state_key):
             st.toast(f"✅ Data tersimpan ({worksheet_name})!")
             return True
         except Exception as e:
-            st.error(f"❌ GAGAL SIMPAN KE GOOGLE SHEETS: {e}")
+            st.error(f"❌ Gagal simpan ke Google Sheets: {e}")
             return False
     return False
 
-# Inisialisasi Data ke Session State
+# Inisialisasi Data
 if "df_users" not in st.session_state:
     st.session_state["df_users"] = load_worksheet("Users", COLS_USERS)
 
@@ -129,7 +130,7 @@ if "user_photo" not in st.session_state:
     st.session_state["user_photo"] = ""
 
 # ----------------------------------------------------
-# 4. HALAMAN LOGIN & REGISTER
+# 4. LOGIN & REGISTER
 # ----------------------------------------------------
 if not st.session_state["logged_in"]:
     st.title("🏋️‍♂️ Gym & Running Progress Tracker")
@@ -173,13 +174,13 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 # ----------------------------------------------------
-# 5. APLIKASI UTAMA (SETELAH USER LOGIN)
+# 5. APLIKASI UTAMA
 # ----------------------------------------------------
 current_user = st.session_state["username"]
 user_fullname = st.session_state["user_fullname"]
 user_photo = st.session_state["user_photo"]
 
-# TAMPILAN SIDEBAR
+# SIDEBAR NAVIGATION
 if user_photo and str(user_photo).strip() != "":
     st.sidebar.image(user_photo, width=120)
 else:
@@ -207,16 +208,16 @@ st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["🏠 Beranda", "🏋️‍♂️ Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
+    ["🏠 Pengenalan Aplikasi", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
-# MENU 1: PENGENALAN APLIKASI (LANDING PAGE)
+# MENU 1: PENGENALAN APLIKASI
 # ----------------------------------------------------
-if "Beranda" in menu:
+if "Pengenalan Aplikasi" in menu:
     st.subheader(f"👋 Halo, {user_fullname}!")
     st.markdown("""
-    Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel, cepat, dan rapi dari HP-mu.
+    Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel dari HP.
     """)
 
     st.markdown("---")
@@ -226,38 +227,25 @@ if "Beranda" in menu:
     with col_f1:
         st.markdown("""
         * **🏋️‍♂️ Input Workout Log:**
-          Ketik langsung nama sesi & gerakan latihanmu secara fleksibel tanpa perlu template yang kaku. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)** otomatis!
-        
+          Ketik langsung nama sesi & gerakan latihanmu secara fleksibel tanpa template kaku. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)** otomatis.
         * **🥗 Daily Habits Tracker:**
-          Pantau kebiasaan harian seperti asupan protein, hidrasi air, kualitas tidur, serta level energi dan recovery harianmu.
+          Pantau kebiasaan harian seperti asupan protein, hidrasi air, kualitas tidur, energi, dan recovery.
         """)
 
     with col_f2:
         st.markdown("""
         * **📈 Progress Mingguan:**
-          Evaluasi konsistensi latihan dan waktu tidur mingguan untuk memastikan kamu tidak overtraining.
-
+          Evaluasi konsistensi latihan dan waktu tidur mingguan agar tidak overtraining.
         * **📊 Dashboard Stats & Grafik:**
-          Lihat statistik total volume angkatan, jarak lari, daftar rekor angkatan terberat (PR), serta grafik perkembangan dari waktu ke waktu.
+          Lihat statistik volume angkatan, jarak lari, daftar rekor angkatan terberat (PR), serta grafik perkembangan harian.
         """)
 
-    st.markdown("---")
-    st.markdown("### 📱 Tips Penggunaan di HP:")
-    st.info("""
-    **Agar Tampil Seperti Aplikasi Asli (Tanpa Bar Browser):**
-    1. Buka web ini di Google Chrome (Android) atau Safari (iPhone).
-    2. Klik menu pilihan/share ➔ Pilih **"Add to Home Screen"** (*Tambahkan ke Layar Utama*).
-    3. Buka ikon aplikasi langsung dari layar utama HP-mu kapan saja saat latihan!
-    """)
-
 # ----------------------------------------------------
-# MENU 2: INPUT WORKOUT LOG (CUSTOM MANUAL)
+# MENU 2: INPUT WORKOUT LOG
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
     st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Latihan Harian")
-    st.caption("Ketik nama sesi dan gerakan secara bebas sesuai latihanmu hari ini.")
 
-    # Pilihan Tipe Latihan
     tipe_latihan = st.radio(
         "Pilih Tipe Latihan:", 
         ["🏋️‍♂️ Gym / Angkatan Beban", "🏃‍♂️ Running / Lari"], 
@@ -273,14 +261,13 @@ elif "Input Workout Log" in menu:
     # JIKA TIPE LATIHAN = RUNNING
     if "Running" in tipe_latihan:
         rc1, rc2 = st.columns(2)
-        sesi_pilihan = rc1.text_input("Nama Sesi (Misal: Running Pagi / Zone 2)", value="Running").strip()
-        exercise_final = rc2.text_input("Jenis Lari (Misal: Easy Run / Interval / Tempo)", value="Easy Run").strip()
+        sesi_pilihan = rc1.text_input("Nama Sesi", value="Running", placeholder="Misal: Running Pagi / Zone 2").strip()
+        exercise_final = rc2.text_input("Jenis Lari", value="Easy Run", placeholder="Misal: Easy Run / Interval").strip()
 
         rc3, rc4, rc5 = st.columns(3)
         jarak = rc3.number_input("Jarak Lari (km)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
         waktu_menit = rc4.number_input("Waktu Tempuh (Menit)", min_value=1.0, value=30.0, step=0.5)
 
-        # Hitung Pace Otomatis
         if jarak > 0:
             pace_decimal = waktu_menit / jarak
             pace_min = int(pace_decimal)
@@ -296,7 +283,7 @@ elif "Input Workout Log" in menu:
 
         rc6, rc7 = st.columns(2)
         rpe = rc6.number_input("RPE / Effort (1-10)", min_value=1, max_value=10, value=7)
-        catatan = rc7.text_input("Catatan Lari (Misal: Rute, Heart Rate, Cuaca)")
+        catatan = rc7.text_input("Catatan Lari (Opsional)")
 
         if st.button("🏃‍♂️ Simpan Sesi Running", type="primary"):
             if not sesi_pilihan or not exercise_final:
@@ -318,13 +305,13 @@ elif "Input Workout Log" in menu:
                 }
                 df_updated = pd.concat([st.session_state["df_workout"], pd.DataFrame([new_entry])], ignore_index=True)
                 save_worksheet(df_updated, "Workout_Logs", "df_workout")
-                st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km) tersimpan!")
+                st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km) berhasil disimpan!")
 
     # JIKA TIPE LATIHAN = GYM
     else:
         gc1, gc2 = st.columns(2)
-        sesi_pilihan = gc1.text_input("Nama Sesi (Misal: Push Day / Leg Heavy / Upper A)", placeholder="Ketik Sesi Latihan...").strip()
-        exercise_final = gc2.text_input("Nama Gerakan (Misal: Bench Press / Squat / Cable Fly)", placeholder="Ketik Nama Gerakan...").strip()
+        sesi_pilihan = gc1.text_input("Nama Sesi Latihan", placeholder="Ketik misal: Push Day / Leg Heavy").strip()
+        exercise_final = gc2.text_input("Nama Gerakan", placeholder="Ketik misal: Bench Press / Squat").strip()
 
         st.markdown("#### Detail Set Angkatan:")
         c4, c5, c6, c7, c8 = st.columns(5)
@@ -343,9 +330,13 @@ elif "Input Workout Log" in menu:
             if not sesi_pilihan or not exercise_final:
                 st.error("⚠️ Nama Sesi dan Nama Gerakan wajib diisi!")
             else:
-                # CEK PERSONAL RECORD (PR)
                 df_all = st.session_state["df_workout"]
-                mask_ex = (df_all["User"] == current_user) & (df_all["Exercise"].str.lower() == exercise_final.lower()) & (df_all["Sesi"] != "Running")
+                
+                # Proteksi filter aman dari NaN
+                user_ex_series = df_all["Exercise"].fillna("").astype(str).str.lower()
+                user_sesi_series = df_all["Sesi"].fillna("").astype(str).str.lower()
+                
+                mask_ex = (df_all["User"] == current_user) & (user_ex_series == exercise_final.lower()) & (~user_sesi_series.str.contains("run"))
                 df_prev_ex = df_all[mask_ex]
                 
                 is_pr = False
@@ -379,7 +370,6 @@ elif "Input Workout Log" in menu:
                 else:
                     st.success(f"✅ Set {set_num} ({exercise_final}) tersimpan!")
 
-        # TIMER ISTIRAHAT
         st.markdown("---")
         with st.expander("⏱️ Timer Istirahat Antar Set (Rest Timer)"):
             t_col1, t_col2, t_col3, t_col4 = st.columns(4)
@@ -414,7 +404,7 @@ elif "Input Workout Log" in menu:
                     st.success("✅ Log latihan berhasil dihapus!")
                     st.rerun()
     else:
-        st.info("Belum ada data latihan / running terdaftar.")
+        st.info("Belum ada data latihan terdaftar.")
 
 # ----------------------------------------------------
 # MENU 3: DAILY HABITS
@@ -538,8 +528,9 @@ elif "Dashboard Stats" in menu:
     df_user_workout = st.session_state["df_workout"][st.session_state["df_workout"]["User"] == current_user]
 
     if not df_user_workout.empty:
-        df_gym = df_user_workout[~df_user_workout["Sesi"].str.contains("run", case=False, na=False)].copy()
-        df_run = df_user_workout[df_user_workout["Sesi"].str.contains("run", case=False, na=False)].copy()
+        sesi_series = df_user_workout["Sesi"].fillna("").astype(str).str.lower()
+        df_gym = df_user_workout[~sesi_series.str.contains("run")].copy()
+        df_run = df_user_workout[sesi_series.str.contains("run")].copy()
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Set Gym", len(df_gym))
@@ -563,7 +554,6 @@ elif "Dashboard Stats" in menu:
 
         st.markdown("---")
 
-        # REKOR PERSONAL RECORD (PR)
         if not df_gym.empty:
             st.markdown("### 🥇 Rekor Angkatan Terberat (PR)")
             pr_df = df_gym.groupby("Exercise")["Beban_num"].max().reset_index()
@@ -578,7 +568,6 @@ elif "Dashboard Stats" in menu:
             st.subheader("🏃‍♂️ Progress Jarak Lari (km)")
             st.line_chart(df_run, x="Tanggal", y="Beban (kg)", color="Exercise")
 
-        # DOWNLOAD CSV BUTTON
         st.markdown("---")
         st.markdown("### 📥 Unduh Data")
         csv_data = df_user_workout.to_csv(index=False).encode('utf-8')
@@ -593,14 +582,13 @@ elif "Dashboard Stats" in menu:
         st.warning("⚠️ Belum ada data latihan yang dicatat.")
 
 # ----------------------------------------------------
-# MENU 6: PENGATURAN (SETTINGS)
+# MENU 6: PENGATURAN
 # ----------------------------------------------------
 elif "Pengaturan" in menu:
     st.subheader("⚙️ Pengaturan Akun & Profil")
 
     tab_profile, tab_security, tab_export = st.tabs(["👤 Edit Profil & Foto", "🔒 Keamanan & Password", "📥 Ekspor Data"])
 
-    # TAB 1: EDIT PROFIL & FOTO
     with tab_profile:
         col_img, col_form = st.columns([1, 3])
         
@@ -637,7 +625,6 @@ elif "Pengaturan" in menu:
             else:
                 st.error("⚠️ Nama lengkap tidak boleh kosong!")
 
-    # TAB 2: UBAH PASSWORD
     with tab_security:
         old_pass = st.text_input("Password Saat Ini", type="password")
         new_pass = st.text_input("Password Baru", type="password")
@@ -660,7 +647,6 @@ elif "Pengaturan" in menu:
                 if save_worksheet(df_u, "Users", "df_users"):
                     st.success("🎉 Password berhasil diperbarui!")
 
-    # TAB 3: EKSPOR DATA
     with tab_export:
         df_u_w = st.session_state["df_workout"][st.session_state["df_workout"]["User"] == current_user]
         df_u_h = st.session_state["df_habits"][st.session_state["df_habits"]["User"] == current_user]
@@ -668,23 +654,8 @@ elif "Pengaturan" in menu:
 
         col_d1, col_d2, col_d3 = st.columns(3)
         with col_d1:
-            st.download_button(
-                "📥 Log Workout (.csv)", 
-                data=df_u_w.to_csv(index=False).encode('utf-8'),
-                file_name=f"workout_{current_user}.csv", 
-                mime="text/csv"
-            )
+            st.download_button("📥 Log Workout (.csv)", data=df_u_w.to_csv(index=False).encode('utf-8'), file_name=f"workout_{current_user}.csv", mime="text/csv")
         with col_d2:
-            st.download_button(
-                "📥 Daily Habits (.csv)", 
-                data=df_u_h.to_csv(index=False).encode('utf-8'),
-                file_name=f"habits_{current_user}.csv", 
-                mime="text/csv"
-            )
+            st.download_button("📥 Daily Habits (.csv)", data=df_u_h.to_csv(index=False).encode('utf-8'), file_name=f"habits_{current_user}.csv", mime="text/csv")
         with col_d3:
-            st.download_button(
-                "📥 Progress Mingguan (.csv)", 
-                data=df_u_wk.to_csv(index=False).encode('utf-8'),
-                file_name=f"weekly_{current_user}.csv", 
-                mime="text/csv"
-            )
+            st.download_button("📥 Progress Mingguan (.csv)", data=df_u_wk.to_csv(index=False).encode('utf-8'), file_name=f"weekly_{current_user}.csv", mime="text/csv")
