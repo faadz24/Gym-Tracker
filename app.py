@@ -7,16 +7,16 @@ import time
 from PIL import Image
 
 # ----------------------------------------------------
-# 1. KONFIGURASI HALAMAN (SIDEBAR OTOMATIS TERBUKA)
+# 1. KONFIGURASI HALAMAN & LOGO
 # ----------------------------------------------------
 st.set_page_config(
-    page_title="Gym & Running Progress Tracker", 
+    page_title="ج", 
     layout="wide", 
-    page_icon="🏋️‍♂️",
+    page_icon="⚡",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS: Sembunyikan footer & menu titik tiga tanpa mengunci Sidebar
+# Custom CSS: Sembunyikan footer & menu titik tiga
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -133,7 +133,7 @@ if "user_photo" not in st.session_state:
 # 4. LOGIN & REGISTER
 # ----------------------------------------------------
 if not st.session_state["logged_in"]:
-    st.title("🏋️‍♂️ Gym & Running Progress Tracker")
+    st.title("⚡ ج")
     st.subheader("Silakan Login atau Buat Akun Baru")
 
     tab_login, tab_register = st.tabs(["🔑 Login", "📝 Buat Akun Baru"])
@@ -184,7 +184,7 @@ user_photo = st.session_state["user_photo"]
 if user_photo and str(user_photo).strip() != "":
     st.sidebar.image(user_photo, width=120)
 else:
-    st.sidebar.title("👤")
+    st.sidebar.title("⚡")
 
 st.sidebar.markdown(f"### {user_fullname}")
 st.sidebar.caption(f"Logged as: @{current_user}")
@@ -204,7 +204,7 @@ if st.sidebar.button("🔄 Sync Data Google Sheets"):
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
     st.rerun()
 
-st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
+st.title("⚡ ج")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
@@ -217,7 +217,7 @@ menu = st.sidebar.radio(
 if "Beranda" in menu:
     st.subheader(f"👋 Halo, {user_fullname}!")
     st.markdown("""
-    Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel dari HP.
+    Selamat datang di **ج**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara praktis.
     """)
 
     st.markdown("---")
@@ -227,7 +227,7 @@ if "Beranda" in menu:
     with col_f1:
         st.markdown("""
         * **🏋️‍♂️ Input Workout Log:**
-          Ketik langsung nama sesi & gerakan latihanmu secara fleksibel tanpa template kaku. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)** otomatis.
+          Ketik langsung nama sesi & gerakan latihanmu secara fleksibel. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)**.
         * **🥗 Daily Habits Tracker:**
           Pantau kebiasaan harian seperti asupan protein, hidrasi air, kualitas tidur, energi, dan recovery.
         """)
@@ -332,7 +332,6 @@ elif "Input Workout Log" in menu:
             else:
                 df_all = st.session_state["df_workout"]
                 
-                # Proteksi filter aman dari NaN
                 user_ex_series = df_all["Exercise"].fillna("").astype(str).str.lower()
                 user_sesi_series = df_all["Sesi"].fillna("").astype(str).str.lower()
                 
