@@ -134,7 +134,7 @@ if "user_photo" not in st.session_state:
 # ----------------------------------------------------
 if not st.session_state["logged_in"]:
     st.title("🏋️‍♂️ Gym & Running Progress Tracker")
-    st.subheader("Silakan Login atau Buat Akun Baru")
+    st.subheader("Login atau Buat Akun Baru")
 
     tab_login, tab_register = st.tabs(["🔑 Login", "📝 Buat Akun Baru"])
 
@@ -204,17 +204,17 @@ if st.sidebar.button("🔄 Sync Data Google Sheets"):
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
     st.rerun()
 
-st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
+st.title("Gym & Running Tracker")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["🏠 Pengenalan Aplikasi", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
+    ["🏠 Beranda", "🏋️‍♂️ Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
 # MENU 1: PENGENALAN APLIKASI
 # ----------------------------------------------------
-if "Pengenalan Aplikasi" in menu:
+if "Beranda" in menu:
     st.subheader(f"👋 Halo, {user_fullname}!")
     st.markdown("""
     Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel dari HP.
@@ -226,7 +226,7 @@ if "Pengenalan Aplikasi" in menu:
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         st.markdown("""
-        * **🏋️‍♂️ Input Workout Log:**
+        * **🏋️‍♂️ Workout Log:**
           Ketik langsung nama sesi & gerakan latihanmu secara fleksibel tanpa template kaku. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)** otomatis.
         * **🥗 Daily Habits Tracker:**
           Pantau kebiasaan harian seperti asupan protein, hidrasi air, kualitas tidur, energi, dan recovery.
@@ -241,7 +241,7 @@ if "Pengenalan Aplikasi" in menu:
         """)
 
 # ----------------------------------------------------
-# MENU 2: INPUT WORKOUT LOG
+# MENU 2: WORKOUT LOG
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
     st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Latihan Harian")
