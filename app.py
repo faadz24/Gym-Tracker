@@ -78,7 +78,6 @@ COLS_USERS = ["Username", "Password", "Nama", "Foto"]
 COLS_WORKOUT = ["User", "Tanggal", "Hari", "Sesi", "Exercise", "Set", "Reps", "Beban (kg)", "RIR", "RPE", "Est. 1RM", "Catatan"]
 COLS_HABITS = ["User", "Tanggal", "Latihan", "Protein", "Buah/Sayur", "Minum Cukup", "Tidur Cukup", "Energi", "Recovery", "Catatan"]
 COLS_WEEKLY = ["User", "Minggu", "Latihan Upper", "Latihan Lower", "Total Sesi", "Tidur Rata-rata", "Energi", "Recovery", "Catatan"]
-COLS_ROUTINES = ["User", "Routine_Name", "Exercise", "Target_Sets", "Target_Reps"]
 
 def load_worksheet(worksheet_name, default_cols):
     if GSHEETS_AVAILABLE:
@@ -119,9 +118,6 @@ if "df_habits" not in st.session_state:
 
 if "df_weekly" not in st.session_state:
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
-
-if "df_routines" not in st.session_state:
-    st.session_state["df_routines"] = load_worksheet("Routines", COLS_ROUTINES)
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
@@ -205,145 +201,86 @@ if st.sidebar.button("🔄 Sync Data Google Sheets"):
     st.session_state["df_workout"] = load_worksheet("Workout_Logs", COLS_WORKOUT)
     st.session_state["df_habits"] = load_worksheet("Habits_Logs", COLS_HABITS)
     st.session_state["df_weekly"] = load_worksheet("Weekly_Logs", COLS_WEEKLY)
-    st.session_state["df_routines"] = load_worksheet("Routines", COLS_ROUTINES)
     st.rerun()
 
-st.title("🏋‍♂️ Gym & 🏃‍♂️ Running Tracker")
+st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["📋 Routine Builder", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
+    ["🏠 Pengenalan Aplikasi", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
-# MENU 1: ROUTINE BUILDER (PEMBUAT TEMPLATE CUSTOM)
+# MENU 1: PENGENALAN APLIKASI (LANDING PAGE)
 # ----------------------------------------------------
-if "Routine Builder" in menu:
-    st.subheader("📋 Routine Builder (Kustomisasi Sesi & Gerakan)")
-    st.caption("Buat dan atur template sesi latihan kamu sendiri agar latihan di gym makin cepat dan fleksibel.")
+if "Pengenalan Aplikasi" in menu:
+    st.subheader(f"👋 Halo, {user_fullname}!")
+    st.markdown("""
+    Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel, cepat, dan rapi dari HP-mu.
+    """)
 
-    df_routines = st.session_state["df_routines"]
-    df_user_routines = df_routines[df_routines["User"] == current_user]
+    st.markdown("---")
+    st.markdown("### 🚀 Fitur Utama Aplikasi:")
 
-    # TOMBOL GENERATE DEFAULT ROUTINES (Pilihan Praktis)
-    if df_user_routines.empty:
-        st.info("💡 Belum ada routine yang kamu buat. Klik tombol di bawah untuk memuat preset Upper/Lower bawaan atau buat baru dari nol.")
-        if st.button("📥 Load Preset Upper / Lower Split"):
-            default_data = [
-                {"User": current_user, "Routine_Name": "Upper A", "Exercise": "Bench Press", "Target_Sets": 3, "Target_Reps": "6-8"},
-                {"User": current_user, "Routine_Name": "Upper A", "Exercise": "Pull Up", "Target_Sets": 3, "Target_Reps": "8-12"},
-                {"User": current_user, "Routine_Name": "Upper A", "Exercise": "Shoulder Press", "Target_Sets": 2, "Target_Reps": "8-12"},
-                {"User": current_user, "Routine_Name": "Lower A", "Exercise": "Squat", "Target_Sets": 3, "Target_Reps": "6-8"},
-                {"User": current_user, "Routine_Name": "Lower A", "Exercise": "Romanian Deadlift", "Target_Sets": 3, "Target_Reps": "6-10"},
-                {"User": current_user, "Routine_Name": "Running", "Exercise": "Easy Run", "Target_Sets": 1, "Target_Reps": "5 km"}
-            ]
-            df_updated = pd.concat([df_routines, pd.DataFrame(default_data)], ignore_index=True)
-            save_worksheet(df_updated, "Routines", "df_routines")
-            st.rerun()
-
-    tab_view, tab_add = st.tabs(["📌 Daftar Sesi Kamu", "➕ Tambah Sesi / Gerakan Baru"])
-
-    with tab_view:
-        if not df_user_routines.empty:
-            grouped = df_user_routines.groupby("Routine_Name")
-            for r_name, group in grouped:
-                with st.expander(f"🎯 Sesi: {r_name} ({len(group)} Gerakan)", expanded=True):
-                    show_df = group[["Exercise", "Target_Sets", "Target_Reps"]].reset_index(drop=True)
-                    st.dataframe(show_df, use_container_width=True)
-
-                    # Hapus Sesi / Gerakan
-                    c1, c2 = st.columns([3, 1])
-                    with c2:
-                        if st.button(f"🗑️ Hapus Seluruh Sesi '{r_name}'", key=f"del_r_{r_name}"):
-                            df_updated = df_routines[~((df_routines["User"] == current_user) & (df_routines["Routine_Name"] == r_name))].reset_index(drop=True)
-                            save_worksheet(df_updated, "Routines", "df_routines")
-                            st.rerun()
-        else:
-            st.write("Belum ada sesi latihan tersimpan.")
-
-    with tab_add:
-        st.markdown("### ➕ Tambah Gerakan ke Sesi Latihan")
-        existing_routines = df_user_routines["Routine_Name"].unique().tolist() if not df_user_routines.empty else []
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        st.markdown("""
+        * **🏋️‍♂️ Input Workout Log:**
+          Ketik langsung nama sesi & gerakan latihanmu secara fleksibel tanpa perlu template yang kaku. Dilengkapi fitur **Pace Otomatis** untuk lari, **Estimasi 1RM**, **Rest Timer**, dan deteksi **Personal Record (PR)** otomatis!
         
-        routine_option = st.radio("Pilihan Sesi:", ["Gunakan Sesi Yang Ada", "Buat Nama Sesi Baru"])
-        
-        if routine_option == "Gunakan Sesi Yang Ada" and existing_routines:
-            target_routine = st.selectbox("Pilih Sesi", existing_routines)
-        else:
-            target_routine = st.text_input("Ketik Nama Sesi Baru (misal: Push Day, Leg Day, Running)").strip()
+        * **🥗 Daily Habits Tracker:**
+          Pantau kebiasaan harian seperti asupan protein, hidrasi air, kualitas tidur, serta level energi dan recovery harianmu.
+        """)
 
-        ex_name = st.text_input("Nama Gerakan (misal: Incline Dumbbell Press / Interval Run)").strip()
-        c_sets, c_reps = st.columns(2)
-        t_sets = c_sets.number_input("Target Set", min_value=1, value=3)
-        t_reps = c_reps.text_input("Target Reps / Jarak", "8-12")
+    with col_f2:
+        st.markdown("""
+        * **📈 Progress Mingguan:**
+          Evaluasi konsistensi latihan dan waktu tidur mingguan untuk memastikan kamu tidak overtraining.
 
-        if st.button("➕ Simpan Ke Template Routine", type="primary"):
-            if not target_routine or not ex_name:
-                st.error("⚠️ Nama Sesi dan Nama Gerakan wajib diisi!")
-            else:
-                new_r_item = {
-                    "User": current_user,
-                    "Routine_Name": target_routine,
-                    "Exercise": ex_name,
-                    "Target_Sets": t_sets,
-                    "Target_Reps": t_reps
-                }
-                df_updated = pd.concat([df_routines, pd.DataFrame([new_r_item])], ignore_index=True)
-                save_worksheet(df_updated, "Routines", "df_routines")
-                st.success(f"✅ Gerakan '{ex_name}' berhasil ditambahkan ke Sesi '{target_routine}'!")
-                st.rerun()
+        * **📊 Dashboard Stats & Grafik:**
+          Lihat statistik total volume angkatan, jarak lari, daftar rekor angkatan terberat (PR), serta grafik perkembangan dari waktu ke waktu.
+        """)
+
+    st.markdown("---")
+    st.markdown("### 📱 Tips Penggunaan di HP:")
+    st.info("""
+    **Agar Tampil Seperti Aplikasi Asli (Tanpa Bar Browser):**
+    1. Buka web ini di Google Chrome (Android) atau Safari (iPhone).
+    2. Klik menu pilihan/share ➔ Pilih **"Add to Home Screen"** (*Tambahkan ke Layar Utama*).
+    3. Buka ikon aplikasi langsung dari layar utama HP-mu kapan saja saat latihan!
+    """)
 
 # ----------------------------------------------------
-# MENU 2: INPUT WORKOUT LOG
+# MENU 2: INPUT WORKOUT LOG (CUSTOM MANUAL)
 # ----------------------------------------------------
 elif "Input Workout Log" in menu:
-    st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Sesi Latihan Harian")
-    
-    # Ambil Daftar Routine & Gerakan User
-    df_u_routines = st.session_state["df_routines"][st.session_state["df_routines"]["User"] == current_user]
-    df_u_logs = st.session_state["df_workout"][st.session_state["df_workout"]["User"] == current_user]
+    st.subheader("🏋️‍♂️ / 🏃‍♂️ Catat Latihan Harian")
+    st.caption("Ketik nama sesi dan gerakan secara bebas sesuai latihanmu hari ini.")
 
-    available_routines = list(df_u_routines["Routine_Name"].unique()) if not df_u_routines.empty else []
-    
-    # Tambah opsi default jika belum ada
-    routine_choices = available_routines + ["Running", "Custom / Lainnya"]
+    # Pilihan Tipe Latihan
+    tipe_latihan = st.radio(
+        "Pilih Tipe Latihan:", 
+        ["🏋️‍♂️ Gym / Angkatan Beban", "🏃‍♂️ Running / Lari"], 
+        horizontal=True
+    )
 
-    c1, c2, c3 = st.columns(3)
-    tanggal = c1.date_input("Tanggal", datetime.date.today())
+    c1, c2 = st.columns(2)
+    tanggal = c1.date_input("Tanggal Latihan", datetime.date.today())
     hari = c2.selectbox("Hari", ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
-    sesi_pilihan = c3.selectbox("Pilih Sesi Latihan", routine_choices)
-
-    # Filter Gerakan Sesuai Sesi Pilihan
-    if sesi_pilihan in available_routines:
-        exercises_in_routine = df_u_routines[df_u_routines["Routine_Name"] == sesi_pilihan]["Exercise"].unique().tolist()
-    else:
-        exercises_in_routine = []
-
-    # Kumpulkan juga gerakan yang pernah diinput sebelumnya
-    prev_exercises = df_u_logs["Exercise"].unique().tolist() if not df_u_logs.empty else []
-    
-    all_exercise_options = list(set(exercises_in_routine + prev_exercises)) + ["(Ketik Manual)"]
-    if not all_exercise_options or all_exercise_options == ["(Ketik Manual)"]:
-        all_exercise_options = ["Bench Press", "Squat", "Deadlift", "Pull Up", "Easy Run", "(Ketik Manual)"]
-
-    exercise_choice = st.selectbox("Pilih Gerakan / Jenis Lari", all_exercise_options)
-    
-    if exercise_choice == "(Ketik Manual)":
-        exercise_final = st.text_input("Ketik Nama Gerakan Manual").strip()
-    else:
-        exercise_final = exercise_choice
 
     st.markdown("---")
 
-    # JIKA SESI ATAU GERAKAN BERUNSUR RUNNING
-    is_running = "run" in sesi_pilihan.lower() or "run" in exercise_final.lower() or sesi_pilihan == "Running"
+    # JIKA TIPE LATIHAN = RUNNING
+    if "Running" in tipe_latihan:
+        rc1, rc2 = st.columns(2)
+        sesi_pilihan = rc1.text_input("Nama Sesi (Misal: Running Pagi / Zone 2)", value="Running").strip()
+        exercise_final = rc2.text_input("Jenis Lari (Misal: Easy Run / Interval / Tempo)", value="Easy Run").strip()
 
-    if is_running:
-        st.markdown("### 🏃‍♂️ Parameter Running")
-        rc1, rc2, rc3 = st.columns(3)
-        jarak = rc1.number_input("Jarak Lari (km)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
-        waktu_menit = rc2.number_input("Waktu Tempuh (Menit)", min_value=1.0, value=30.0, step=0.5)
-        
+        rc3, rc4, rc5 = st.columns(3)
+        jarak = rc3.number_input("Jarak Lari (km)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+        waktu_menit = rc4.number_input("Waktu Tempuh (Menit)", min_value=1.0, value=30.0, step=0.5)
+
+        # Hitung Pace Otomatis
         if jarak > 0:
             pace_decimal = waktu_menit / jarak
             pace_min = int(pace_decimal)
@@ -355,15 +292,15 @@ elif "Input Workout Log" in menu:
         else:
             pace_str = "0'00\"/km"
 
-        rc3.metric("⏱️ Pace Otomatis", pace_str)
+        rc5.metric("⏱️ Pace Otomatis", pace_str)
 
-        rc4, rc5 = st.columns(2)
-        rpe = rc4.number_input("RPE / Effort (1-10)", min_value=1, max_value=10, value=7)
-        catatan = rc5.text_input("Catatan Lari (Misal: Rute, Heart Rate, Cuaca)")
+        rc6, rc7 = st.columns(2)
+        rpe = rc6.number_input("RPE / Effort (1-10)", min_value=1, max_value=10, value=7)
+        catatan = rc7.text_input("Catatan Lari (Misal: Rute, Heart Rate, Cuaca)")
 
-        if st.button("➕ Simpan Sesi Running", type="primary"):
-            if not exercise_final:
-                st.error("⚠️ Silakan pilih atau ketik jenis lari terlebih dahulu!")
+        if st.button("🏃‍♂️ Simpan Sesi Running", type="primary"):
+            if not sesi_pilihan or not exercise_final:
+                st.error("⚠️ Nama Sesi dan Jenis Lari wajib diisi!")
             else:
                 new_entry = {
                     "User": current_user,
@@ -383,8 +320,13 @@ elif "Input Workout Log" in menu:
                 save_worksheet(df_updated, "Workout_Logs", "df_workout")
                 st.success(f"🏃‍♂️ Sesi Running ({exercise_final} - {jarak} km) tersimpan!")
 
+    # JIKA TIPE LATIHAN = GYM
     else:
-        st.markdown("### 🏋️‍♂️ Parameter Angkatan Gym")
+        gc1, gc2 = st.columns(2)
+        sesi_pilihan = gc1.text_input("Nama Sesi (Misal: Push Day / Leg Heavy / Upper A)", placeholder="Ketik Sesi Latihan...").strip()
+        exercise_final = gc2.text_input("Nama Gerakan (Misal: Bench Press / Squat / Cable Fly)", placeholder="Ketik Nama Gerakan...").strip()
+
+        st.markdown("#### Detail Set Angkatan:")
         c4, c5, c6, c7, c8 = st.columns(5)
         set_num = c4.number_input("Set Ke-", min_value=1, value=1)
         reps = c5.number_input("Reps (Ulang)", min_value=1, value=10)
@@ -395,15 +337,15 @@ elif "Input Workout Log" in menu:
         est_1rm_val = calculate_1rm(beban, reps)
         st.caption(f"💡 **Est. 1RM (Satu Angkatan Maksimal):** {est_1rm_val} kg")
 
-        catatan = st.text_input("Catatan Set / Sensasi Otot")
+        catatan = st.text_input("Catatan Set / Sensasi Otot (Opsional)")
 
         if st.button("➕ Simpan Set Latihan", type="primary"):
-            if not exercise_final:
-                st.error("⚠️ Silakan pilih atau ketik nama gerakan terlebih dahulu!")
+            if not sesi_pilihan or not exercise_final:
+                st.error("⚠️ Nama Sesi dan Nama Gerakan wajib diisi!")
             else:
                 # CEK PERSONAL RECORD (PR)
                 df_all = st.session_state["df_workout"]
-                mask_ex = (df_all["User"] == current_user) & (df_all["Exercise"] == exercise_final) & (df_all["Sesi"] != "Running")
+                mask_ex = (df_all["User"] == current_user) & (df_all["Exercise"].str.lower() == exercise_final.lower()) & (df_all["Sesi"] != "Running")
                 df_prev_ex = df_all[mask_ex]
                 
                 is_pr = False
@@ -596,8 +538,8 @@ elif "Dashboard Stats" in menu:
     df_user_workout = st.session_state["df_workout"][st.session_state["df_workout"]["User"] == current_user]
 
     if not df_user_workout.empty:
-        df_gym = df_user_workout[df_user_workout["Sesi"] != "Running"].copy()
-        df_run = df_user_workout[df_user_workout["Sesi"] == "Running"].copy()
+        df_gym = df_user_workout[~df_user_workout["Sesi"].str.contains("run", case=False, na=False)].copy()
+        df_run = df_user_workout[df_user_workout["Sesi"].str.contains("run", case=False, na=False)].copy()
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Set Gym", len(df_gym))
