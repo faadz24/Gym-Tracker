@@ -207,7 +207,7 @@ st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["🏠 Pengenalan Aplikasi", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
+    ["🏠 Beranda", "🏋️‍♂️ Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
