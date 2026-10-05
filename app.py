@@ -208,13 +208,13 @@ st.title("🏋️‍♂️ Gym & 🏃‍♂️ Running Tracker")
 
 menu = st.sidebar.radio(
     "Pilih Halaman:", 
-    ["🏠 Pengenalan Aplikasi", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
+    ["🏠 Beranda", "🏋️‍♂️ Input Workout Log", "🥗 Daily Habits", "📈 Progress Mingguan", "📊 Dashboard Stats", "⚙️ Pengaturan"]
 )
 
 # ----------------------------------------------------
 # MENU 1: PENGENALAN APLIKASI
 # ----------------------------------------------------
-if "Pengenalan Aplikasi" in menu:
+if "Beranda" in menu:
     st.subheader(f"👋 Halo, {user_fullname}!")
     st.markdown("""
     Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel dari HP.
