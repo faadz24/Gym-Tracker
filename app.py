@@ -213,7 +213,7 @@ menu = st.sidebar.radio(
 # ----------------------------------------------------
 # MENU 1: PENGENALAN APLIKASI (LANDING PAGE)
 # ----------------------------------------------------
-if "Pengenalan Aplikasi" in menu:
+if "Beranda" in menu:
     st.subheader(f"👋 Halo, {user_fullname}!")
     st.markdown("""
     Selamat datang di **Gym & Running Progress Tracker**! Aplikasi ini dirancang khusus untuk membantumu mencatat perkembangan latihan gym, aktivitas lari, dan pola hidup sehat secara fleksibel, cepat, dan rapi dari HP-mu.
